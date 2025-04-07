@@ -1,6 +1,7 @@
-import google.generativeai as genai
 from django.conf import settings
 from guidedProductAssistant.utils import productDetails
+from openai import OpenAI
+import openai
 
 # genai.configure(api_key="AIzaSyABnL_dU_kIQ0lRMyFy7BpgsdO5AK9DY6Q")  # techteam 
 
