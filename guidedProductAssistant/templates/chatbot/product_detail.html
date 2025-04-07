@@ -1,0 +1,662 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ product.product_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container { margin-top: 20px; }
+        .product-img { width: 200px; height: auto; }
+        
+        /* Chatbot Icon */
+        .chat-icon {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Chatbot Container */
+        .chat-container {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 350px;
+            height: 450px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+            display: none; /* Initially hidden */
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #ccc;
+        }
+
+        /* Chat Header */
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Chat Body */
+        .chat-body {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+
+        /* Chat Input */
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .chat-input button {
+            margin-left: 5px;
+            padding: 8px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        /* Close Button */
+        .close-chat {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            cursor: pointer;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>{{ product.product_name }}</h2>
+        
+        <img src="{{ product.logo }}" class="product-img" alt="Product Image">
+        
+        <p><strong>SKU:</strong> {{ product.sku_number_product_code_item_number }}</p>
+        <p><strong>Model:</strong> {{ product.model }}</p>
+        <p><strong>MPN:</strong> {{ product.mpn }}</p>
+        <p><strong>UPC/EAN:</strong> {{ product.upc_ean }}</p>
+        <p><strong>Brand:</strong> {{ product.brand_name }}</p>
+        
+        {% if product.brand_logo %}
+        <p><strong>Brand Logo:</strong></p>
+        <img src="{{ product.brand_logo }}" class="product-img" alt="Brand Logo">
+        {% endif %}
+        
+        <p><strong>Short Description:</strong> {{ product.short_description }}</p>
+        <p><strong>Long Description:</strong> {{ product.long_description }}</p>
+        <p><strong>List Price:</strong> ${{ product.list_price }}</p>
+        <p><strong>MSRP:</strong> ${{ product.msrp }}</p>
+        <p><strong>Was Price:</strong> ${{ product.was_price }}</p>
+        <p><strong>Discount:</strong> {{ product.discount }}</p>
+        <p><strong>Currency:</strong> {{ product.currency }}</p>
+        <p><strong>Quantity:</strong> {{ product.quantity }}</p>
+        <p><strong>Availability:</strong> {% if product.availability %}In Stock{% else %}Out of Stock{% endif %}</p>
+        <p><strong>End Level Category:</strong> {{ product.end_level_category }}</p>
+        
+        <h3>Features</h3>
+        <ul>
+            {% for feature in product.features %}
+                <li>{{ feature }}</li>
+            {% empty %}
+                <li>No features available.</li>
+            {% endfor %}
+        </ul>
+    
+        <h3>From the Manufacturer</h3>
+        <p>{{ product.from_the_manufacture }}</p>
+    
+        <h3>Additional Images</h3>
+        <div>
+            {% for image in product.images %}
+                <img src="{{ image }}" class="product-img" alt="Product Image">
+            {% empty %}
+                <p>No additional images available.</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+
+<div class="chat-icon" onclick="toggleChat()">💬</div>
+
+<div class="chat-container" id="chatBox">
+    <div class="chat-header">
+        Product Chat Assistant 
+        <span class="close-chat" onclick="toggleChat()">✖</span>
+    </div>
+    <div class="chat-body" id="chatBody">
+        <p><strong>Bot:</strong> Hello! Ask me about this product.</p>
+    </div>
+    <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="sendMessage(event)">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    function toggleChat() {
+        let chatBox = document.getElementById("chatBox");
+        chatBox.style.display = (chatBox.style.display === "none" || chatBox.style.display === "") ? "flex" : "none";
+    }
+
+    function sendMessage(event) {
+        if (event && event.key !== "Enter") return;
+
+        let userInput = document.getElementById("chatInput");
+        let query = userInput.value.trim();
+        if (!query) return;
+
+        let chatBody = document.getElementById("chatBody");
+        chatBody.innerHTML += `<p><strong>You:</strong> ${query}</p>`;
+        userInput.value = "";
+
+        let productId = "{{ product.id }}";  // Pass product ID from Django template as a string
+        console.log("Product ID:", productId);  // Check in browser console
+
+
+        // Send message to Django backend
+        fetch("/chat/", {   
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: JSON.stringify({ 
+                message: query, 
+                product_id: productId 
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            chatBody.innerHTML += `<p><strong>Bot:</strong> ${data.response}</p>`;
+            chatBody.scrollTop = chatBody.scrollHeight; // Auto-scroll
+        })
+        .catch(error => {
+            chatBody.innerHTML += `<p><strong>Bot:</strong> Sorry, something went wrong.</p>`;
+        });
+    }
+</script>
+
+
+
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ product.product_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            margin-top: 30px;
+        }
+
+        .product-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .product-images {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .main-image {
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .thumbnail-images {
+            display: flex;
+            margin-top: 10px;
+        }
+
+        .thumbnail-images img {
+            width: 60px;
+            height: 60px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .thumbnail-images img:hover {
+            border-color: #007bff;
+        }
+
+        .product-info {
+            margin-top: 20px;
+        }
+
+        .price {
+            font-size: 22px;
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        .availability {
+            font-size: 16px;
+            font-weight: bold;
+            color: green;
+        }
+
+        .features-list {
+            padding-left: 20px;
+        }
+
+        .chat-icon {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .chat-container {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 350px;
+            height: 450px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #ccc;
+        }
+
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .chat-body {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-body p.user-message {
+            text-align: right;
+            background-color: #d1e7ff;
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 10px;
+            margin: 5px 0;
+            max-width: 80%;
+            align-self: flex-end;
+        }
+
+        .chat-body p.bot-message {
+            text-align: left;
+            background-color: #f1f1f1;
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 10px;
+            margin: 5px 0;
+            max-width: 80%;
+            align-self: flex-start;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .chat-input button {
+            margin-left: 5px;
+            padding: 8px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .close-chat {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            cursor: pointer;
+            color: white;
+            font-size: 18px;
+        }
+
+        .typing-loader {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px;
+        }
+
+        .typing-loader span {
+            width: 8px;
+            height: 8px;
+            background-color: #007bff;
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.5s infinite ease-in-out;
+        }
+
+        .typing-loader span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-loader span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-8px); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-5 product-images">
+            <img id="mainImage" src="{{ product.logo }}" class="main-image" alt="Product Image">
+            <div class="thumbnail-images">
+                {% for image in product.images %}
+                    <img src="{{ image }}" onclick="changeMainImage('{{ image }}')" alt="Thumbnail">
+                {% empty %}
+                    <p>No additional images available.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-md-7 product-info">
+            <h1 class="product-title">{{ product.product_name }}</h1>
+            <p class="price">${{ product.list_price }} 
+                <small style="text-decoration: line-through; color: gray;">${{ product.was_price }}</small>
+                <span class="badge bg-success">{{ product.discount }} OFF</span>
+            </p>
+
+            <p><strong>SKU:</strong> {{ product.sku_number_product_code_item_number }}</p>
+            <p><strong>Brand:</strong> {{ product.brand_name }}</p>
+            <p><strong>Category:</strong> {{ product.end_level_category }}</p>
+            <p class="availability">
+                {% if product.availability %}✔ In Stock{% else %}❌ Out of Stock{% endif %}
+            </p>
+
+            <div class="d-flex align-items-center mb-2">
+                <h4 class="me-2">Features:</h4>
+                <button class="btn btn-sm btn-outline-primary" onclick="openAIContentOptions()">⚙️ Generate</button>
+            </div>
+
+            <ul class="features-list" id="featuresList">
+                {% for feature in product.features %}
+                    <li>{{ feature }}</li>
+                {% empty %}
+                    <li>No features available.</li>
+                {% endfor %}
+            </ul>
+
+            <h4>Description:</h4>
+            <p id="productDescription">{{ product.long_description }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="chat-icon" onclick="toggleChat()">💬</div>
+<div class="chat-container" id="chatBox">
+    <div class="chat-header">
+        Product Chat Assistant 
+        <span class="close-chat" onclick="toggleChat()">✖</span>
+    </div>
+    <div class="chat-body" id="chatBody">
+        <p class="bot-message">Hello! Ask me about this product.</p>
+    </div>
+    <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="sendMessage(event)">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<div class="modal fade" id="aiModal" tabindex="-1" aria-labelledby="aiModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Generate Content using AI</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="fetchtitles">
+            <label class="form-check-label" for="fetchTitles">Title</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="fetchFeatures">
+            <label class="form-check-label" for="fetchFeatures">Features</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="fetchDescription">
+            <label class="form-check-label" for="fetchDescription">Description</label>
+        </div>
+        <button class="btn btn-primary mt-2" onclick="fetchAIOptions()">Fetch AI Suggestions</button>
+        <hr>
+        <div id="aiResults" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+function toggleChat() {
+    let chatBox = document.getElementById("chatBox");
+    chatBox.style.display = (chatBox.style.display === "none" || chatBox.style.display === "") ? "flex" : "none";
+}
+
+function sendMessage(event) {
+    if (event && event.key !== "Enter") return;
+
+    let userInput = document.getElementById("chatInput");
+    let query = userInput.value.trim();
+    if (!query) return;
+
+    let chatBody = document.getElementById("chatBody");
+    chatBody.innerHTML += `<p class="user-message">${query}</p>`;
+
+    let loaderId = "loader-" + Date.now();
+    chatBody.innerHTML += `
+        <div id="${loaderId}" class="typing-loader">
+            <span></span><span></span><span></span>
+        </div>
+    `;
+    chatBody.scrollTop = chatBody.scrollHeight;
+    userInput.value = "";
+
+    fetch("/chat/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({ message: query, product_id: "{{ product.id }}" })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById(loaderId).remove();
+        chatBody.innerHTML += `<p class="bot-message">${data.response}</p>`;
+        chatBody.scrollTop = chatBody.scrollHeight;
+    })
+    .catch(error => {
+        document.getElementById(loaderId).remove();
+        chatBody.innerHTML += `<p class="bot-message">Sorry, something went wrong.</p>`;
+    });
+}
+
+function changeMainImage(imageSrc) {
+    document.getElementById("mainImage").src = imageSrc;
+}
+
+function openAIContentOptions() {
+    const aiModal = new bootstrap.Modal(document.getElementById('aiModal'));
+    document.getElementById("aiResults").innerHTML = "";
+    aiModal.show();
+}
+
+function fetchAIOptions() {
+    const fetchFeatures = document.getElementById("fetchFeatures").checked;
+    const fetchDescription = document.getElementById("fetchDescription").checked;
+    const fetchTitles = document.getElementById("fetchtitles").checked;
+
+    if (!fetchFeatures && !fetchDescription && !fetchTitles) {
+        alert("Please select at least one option.");
+        return;
+    }
+
+    const aiResults = document.getElementById("aiResults");
+    aiResults.innerHTML = `
+        <div class="d-flex justify-content-center align-items-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading suggestions...</span>
+        </div>
+    `;
+
+    fetch("/fetch_ai_content/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({
+            product_id: "{{ product.id }}",
+            title: fetchTitles,
+            features: fetchFeatures,
+            description: fetchDescription
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        const container = document.getElementById("aiResults");
+        container.innerHTML = "";
+
+        if (fetchTitles && data.title && data.title.length > 0) {
+            container.innerHTML += "<h5>Titles:</h5>";
+            data.title.forEach((title) => {
+                const btn = document.createElement("button");
+                btn.className = "btn btn-outline-secondary w-100 text-start my-2";
+                btn.innerText = title;
+                btn.onclick = () => {
+                    document.querySelector(".product-title").innerText = title;
+                    document.querySelector("#aiModal .btn-close").click();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        if (fetchFeatures && data.features && data.features.length > 0) {
+            container.innerHTML += "<h5>Features:</h5>";
+            data.features.forEach((featureSet) => {
+                const btn = document.createElement("button");
+                btn.className = "btn btn-outline-secondary w-100 text-start my-2";
+                btn.innerText = featureSet.join(", ");
+                btn.onclick = () => {
+                    const featuresList = document.getElementById("featuresList");
+                    featuresList.innerHTML = "";
+                    featureSet.forEach((feature) => {
+                        const li = document.createElement("li");
+                        li.innerText = feature;
+                        featuresList.appendChild(li);
+                    });
+                    document.querySelector("#aiModal .btn-close").click();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        if (fetchDescription && data.description && data.description.length > 0) {
+            container.innerHTML += "<h5>Descriptions:</h5>";
+            data.description.forEach((desc) => {
+                const btn = document.createElement("button");
+                btn.className = "btn btn-outline-secondary w-100 text-start my-2";
+                btn.innerText = desc;
+                btn.onclick = () => {
+                    document.getElementById("productDescription").innerText = desc;
+                    document.querySelector("#aiModal .btn-close").click();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        if (!container.innerHTML) {
+            container.innerHTML = "<p>No suggestions found.</p>";
+        }
+    })
+    .catch(err => {
+        document.getElementById("aiResults").innerHTML = "<p>Error fetching suggestions.</p>";
+    });
+}
+</script>
+
+</body>
+</html>
