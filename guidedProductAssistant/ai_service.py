@@ -1,12 +1,12 @@
 from django.conf import settings
 from guidedProductAssistant.utils import productDetails
 from openai import OpenAI
-import openai
-
+from openai import OpenAIError
+from openai.types.chat import ChatCompletionMessage
 # genai.configure(api_key="AIzaSyABnL_dU_kIQ0lRMyFy7BpgsdO5AK9DY6Q")  # techteam 
+client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
 def get_product_assistant_response(user_query, product_id):
-    openai.api_key = settings.OPEN_AI_KEY
     product_info = str(productDetails(product_id))
 
     prompt = f"""
@@ -32,8 +32,8 @@ def get_product_assistant_response(user_query, product_id):
     """
 
     try:
-        completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # or use "gpt-3.5-turbo" for faster/cheaper responses
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful product assistant."},
                 {"role": "user", "content": prompt}
@@ -41,8 +41,8 @@ def get_product_assistant_response(user_query, product_id):
             temperature=0.7,
             max_tokens=300
         )
-        return completion.choices[0].message["content"].strip()
+        return response.choices[0].message.content.strip()
+    except OpenAIError as e:
+        return f"An error occurred: {str(e)}"
 
-    except Exception as e:
-        print("OpenAI error:", e)
-        return "Sorry, something went wrong while processing your request."
+  
