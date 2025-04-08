@@ -1,4 +1,5 @@
 from guidedProductAssistant.models import product
+import math
 
 def productDetails(product_id):
     product_id = product.objects.get(id=product_id)
@@ -67,4 +68,18 @@ def productDetails(product_id):
         }
     ]
     product_list = list(product.objects.aggregate(*(pipeline)))
-    return product_list[0]
+    def sanitize_floats(obj):
+        if isinstance(obj, dict):
+            return {k: sanitize_floats(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [sanitize_floats(i) for i in obj]
+        elif isinstance(obj, float):
+            return 0.0 if math.isnan(obj) or math.isinf(obj) else obj
+        else:
+            return obj
+
+    product_list = list(product.objects.aggregate(*pipeline))
+    if product_list:
+        return sanitize_floats(product_list[0])
+    else:
+        return {}

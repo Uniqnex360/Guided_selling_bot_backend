@@ -11,8 +11,8 @@ import json
 import requests
 from django.conf import settings
 from openai import OpenAI
-import openai
-# Use the correct OpenAI client interface
+from openai import OpenAIError
+
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
 
@@ -536,8 +536,8 @@ def regenerateAiContents(request):
 
         def ask_chatgpt(prompt):
             try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",  # or "gpt-3.5-turbo"
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",  # or "gpt-3.5-turbo"
                     messages=[
                         {"role": "system", "content": "You are a helpful product content writer."},
                         {"role": "user", "content": prompt}
@@ -545,8 +545,8 @@ def regenerateAiContents(request):
                     temperature=0.7,
                     max_tokens=500
                 )
-                return response.choices[0].message["content"].strip()
-            except Exception as e:
+                return response.choices[0].message.content.strip()
+            except OpenAIError as e:
                 print("OpenAI Error:", e)
                 return "Error generating content."
 
