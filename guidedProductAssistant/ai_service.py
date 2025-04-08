@@ -33,7 +33,7 @@ def get_product_assistant_response(user_query, product_id):
 
     try:
         completion = openai.ChatCompletion.create(
-            model="gpt-4",  # or use "gpt-3.5-turbo" for faster/cheaper responses
+            model="gpt-3.5-turbo",  # or use "gpt-3.5-turbo" for faster/cheaper responses
             messages=[
                 {"role": "system", "content": "You are a helpful product assistant."},
                 {"role": "user", "content": prompt}

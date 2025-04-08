@@ -15,7 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import path
-from guidedProductAssistant.views import product_list, product_detail, chatbot_view,fetch_ai_content,update_product_content, productList, productDetail,chatbotView, fetchAiContent, fetchProductQuestions, updateProductContent, fetchPromptList, regenerateAiContents
+from guidedProductAssistant.views import product_list, product_detail, chatbot_view,fetch_ai_content,update_product_content, productList, productDetail,chatbotView, fetchAiContent, fetchProductQuestions, updateProductContent, fetchPromptList, regenerateAiContents, script
+
+from guidedProductAssistant.product_finder import fourth_level_categories_view,category_filters_view
 
 urlpatterns = [
     path("", product_list, name="product_list"),  # Home page
@@ -34,4 +36,11 @@ urlpatterns = [
     path("updateProductContent/", updateProductContent, name="updateProductContent"),  # Chatbot API
     path("fetchPromptList/", fetchPromptList, name="fetchPromptList"),  # Chatbot API
     path("regenerateAiContents/", regenerateAiContents, name="regenerateAiContents"),  # Chatbot API
+
+    #Product Finder
+    path("fourth_level_categories/", fourth_level_categories_view, name="fourth_level_categories"),
+    path("category_filters/", category_filters_view, name="category_filters"),  # Category filters
+
+    path("script/", script, name="script"),  # Script page
+
 ]

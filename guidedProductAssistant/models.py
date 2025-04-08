@@ -157,3 +157,17 @@ class product_questions(Document):
 
 class prompt_type(Document):
     name = fields.StringField()
+
+
+
+
+class filter(Document):
+    # Each filter is associated with a leaf category (i.e. level 4)
+    category_id = fields.ReferenceField(product_category, required=True)
+    name = fields.StringField(required=True)  # e.g., "color", "price", etc.
+    filter_type = fields.StringField(
+        required=True,
+        choices=('select', 'range', 'multi-select', 'boolean')
+    )
+    display_order = fields.IntField(default=0)
+    config = fields.DictField(default={})

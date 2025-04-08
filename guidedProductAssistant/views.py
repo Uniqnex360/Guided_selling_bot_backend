@@ -217,8 +217,20 @@ def update_product_content(request):
     
 
 
+@csrf_exempt
 def productList(request):
-    pipeline = [
+    match = {}
+    pipeline = []
+    json_request = JSONParser().parse(request)
+    category_id = json_request.get("category_id")
+    if category_id != None and category_id != "":
+        match = {
+            "category_id": ObjectId(category_id)
+        }
+    pipeline.append({
+        "$match": match
+    })
+    pipeline.extend([
         {
             "$lookup" : {
                 "from" : "product_category",
@@ -245,7 +257,7 @@ def productList(request):
             }
         },
        
-    ]
+    ])
     
     product_list = list(product.objects.aggregate(*(pipeline)))
     data=dict()
@@ -339,6 +351,13 @@ def fetchAiContent(request):
                 for line in response_text.strip().split("\n")
                 if line.strip()
             ][:3]
+            process_list = list()
+            for i in result["title"]:
+                modify_data = dict()
+                modify_data['value'] = i
+                modify_data['checked'] = False
+                process_list.append(modify_data)
+            result["title"] = process_list
  
         if fetch_features:
             prompt_info = f"""
@@ -387,6 +406,13 @@ def fetchAiContent(request):
                     variations.append(feature_lines)
  
             result["features"] = variations[:3]
+            process_list = list()
+            for i in result["features"]:
+                modify_data = dict()
+                modify_data['value'] = i
+                modify_data['checked'] = False
+                process_list.append(modify_data)
+            result["features"] = process_list
  
         if fetch_description:
             prompt_info = f"""
@@ -425,48 +451,59 @@ def fetchAiContent(request):
                     descriptions.append("\n\n".join(paragraph_texts[:2]))
  
             result["description"] = descriptions[:3]
+            process_list = list()
+            for i in result["description"]:
+                modify_data = dict()
+                modify_data['value'] = i
+                modify_data['checked'] = False
+                process_list.append(modify_data)
+            result["description"] = process_list
     return result
-
 
 
 @csrf_exempt
 def updateProductContent(request):
     if request.method == "POST":
         data = json.loads(request.body)
+        print("data", data)
         product_id = data.get("product_id")
         product_objs = data.get("product_obj")
         
         product_obj = product.objects.get(id=product_id)
         try:
             name = []
-            name.append(product_obj.product_name)
-            name.extend(product_obj.old_names)
-            product_obj.product_name = product_objs['product_name']
-            product_obj.old_names = name
+            if product_objs['product_name']:
+                name.append(product_obj.product_name)
+                name.extend(product_obj.old_names)
+                product_obj.product_name = product_objs['product_name']
+                product_obj.old_names = name
         except KeyError:
             pass
         
         try:
             description = []
-            description.append(product_obj.long_description)
-            description.extend(product_obj.old_description)
-            product_obj.long_description = product_objs['long_description']
-            product_obj.old_description = description
+            if product_objs['long_description']:
+                description.append(product_obj.long_description)
+                description.extend(product_obj.old_description)
+                product_obj.long_description = product_objs['long_description']
+                product_obj.old_description = description
         except KeyError:
             pass
 
         try:
             features = []
-            features.append(product_obj.features)
-            features.extend(product_obj.old_features)
-            product_obj.old_features = features
-            product_obj.features = product_objs['features']
+            if product_objs['features'] != []:
+                features.append(product_obj.features)
+                features.extend(product_obj.old_features)
+                product_obj.old_features = features
+                product_obj.features = product_objs['features']
         except KeyError:
             pass
         
         product_obj.save()
         
-        return
+        return True
+
 
 
 
@@ -514,49 +551,137 @@ def regenerateAiContents(request):
                 return "Error generating content."
 
         if regenerate_title:
-            prompt = f"""
-            You are an expert product content writer.
+            for ins in regenerate_title:
+                if ins['checked'] == True:
+                    prompt = f"""
+                    You are an expert product content writer.
 
-            Given the product title below, please **{selected_option.lower()}**. Make sure the title is clear, professional, and suitable for ecommerce platforms in the US.
+                    Given the product title below, please **{selected_option.lower()}**. Make sure the title is clear, professional, and suitable for ecommerce platforms in the US.
 
-            🔧 Original Title:
-            "{regenerate_title}"
+                    🔧 Original Title:
+                    "{ins['value']}"
 
-            ✍️ Updated Title:
-            """
-            result["title"] = ask_chatgpt(prompt)
+                    ✍️ Updated Title:
+                    """
+                    titles = ask_chatgpt(prompt)
+                    ins['value'] =  titles
+                
+            result["title"] = regenerate_title
 
         if regenerate_features:
-            original_features = "\n".join(f"- {f}" for f in regenerate_features)
-            prompt = f"""
-            You are an expert at rewriting product features.
+            for ins in regenerate_features:
+                if ins['checked'] == True:
+                    original_features = "\n".join(f"- {f}" for f in ins['value'])
+                    prompt = f"""
+                    You are an expert at rewriting product features.
 
-            Given the list of bullet-point product features below, please **{selected_option.lower()}**. Keep the format as bullet points.
+                    Given the list of bullet-point product features below, please **{selected_option.lower()}**. Keep the format as bullet points.
 
-            🔧 Original Features:
-            {original_features}
+                    🔧 Original Features:
+                    {original_features}
 
-            ✍️ Updated Features:
-            """
-            response_text = ask_chatgpt(prompt)
-            updated_lines = [
-                line.strip("-•0123456789. ").strip()
-                for line in response_text.split("\n")
-                if line.strip()
-            ]
-            result["features"] = updated_lines
+                    ✍️ Updated Features:
+                    """
+                    response_text = ask_chatgpt(prompt)
+                    updated_lines = [
+                        line.strip("-•0123456789. ").strip()
+                        for line in response_text.split("\n")
+                        if line.strip()
+                    ]
+                    ins["value"] = updated_lines
 
+            result["features"] = regenerate_features
         if regenerate_description:
-            prompt = f"""
-            You are a product description expert.
+            for ins in regenerate_description:
+                if ins['checked'] == True:
+                    prompt = f"""
+                    You are a product description expert.
 
-            Given the product description below, please **{selected_option.lower()}**. Maintain a clear and professional tone suitable for ecommerce and distributor platforms.
+                    Given the product description below, please **{selected_option.lower()}**. Maintain a clear and professional tone suitable for ecommerce and distributor platforms.
 
-            🔧 Original Description:
-            {regenerate_description}
+                    🔧 Original Description:
+                    {ins['value']}
 
-            ✍️ Updated Description:
-            """
-            result["description"] = ask_chatgpt(prompt)
+                    ✍️ Updated Description:
+                    """
+                    result_description = ask_chatgpt(prompt)
+                    ins["value"] = result_description
+            result['description'] = regenerate_description
 
         return result
+
+
+    
+from guidedProductAssistant.models import product_category,filter
+from product_assistant.crud import DatabaseModel
+import threading
+from bson import ObjectId
+from math import isnan
+
+def process_category(category, category_idx):
+    print(f"Processing category {category_idx}: {category.name}")
+    # Fetch all products associated with the category
+    products = product.objects(category_id=category.id)
+    product_idx = 0
+    for product_obj in products:
+        product_idx += 1
+        print(f"Processing product {product_idx}: {product_obj.product_name}")
+        # Iterate through the attributes of the product
+        for attribute_name, attribute_value in product_obj.attributes.items():
+            # Check if a filter with the same name and category_id already exists
+            existing_filter = DatabaseModel.get_document(filter.objects, {"category_id": category.id, "name": attribute_name})
+            if existing_filter:
+                # If the filter exists, update the config['options'] field
+                if 'options' not in existing_filter.config:
+                    existing_filter.config['options'] = []
+                if attribute_value not in existing_filter.config['options']:
+                    existing_filter.config['options'].append(attribute_value)
+                    existing_filter.save()
+            else:
+                # If the filter does not exist, create a new filter
+                new_filter = filter(
+                    category_id=category.id,
+                    name=attribute_name,
+                    filter_type='select',  # Assuming 'select' as default filter type
+                    config={'options': [attribute_value]}
+                )
+                new_filter.save()
+
+def script(request):
+    # Fetch all categories where end_level is True
+    end_level_categories = product_category.objects(end_level=True)
+    threads = []
+    category_idx = 0
+
+    for category in end_level_categories:
+        category_idx += 1
+        thread = threading.Thread(target=process_category, args=(category, category_idx))
+        threads.append(thread)
+        thread.start()
+
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+
+    return True
+
+
+def remove_nan_from_filters():
+
+    # Fetch all filter documents
+    filters = filter.objects()
+
+    for filter_obj in filters:
+        if 'options' in filter_obj.config:
+            # Remove NaN values from the options list
+            cleaned_options = [
+                option for option in filter_obj.config['options']
+                if not (isinstance(option, float) and isnan(option))
+            ]
+            # Update the filter document if changes were made
+            if len(cleaned_options) != len(filter_obj.config['options']):
+                filter_obj.config['options'] = cleaned_options
+                filter_obj.save()
+
+    return True
+
