@@ -223,45 +223,49 @@ def productList(request):
     pipeline = []
     json_request = JSONParser().parse(request)
     category_id = json_request.get("category_id")
-    if category_id != None and category_id != "":
-        match = {
-            "category_id": ObjectId(category_id)
-        }
+    attributes = json_request.get("attributes", {})
+
+    if category_id is not None and category_id != "":
+        match["category_id"] = ObjectId(category_id)
+
+    if attributes and isinstance(attributes, dict):
+        for attribute_name, attribute_value in attributes.items():
+            if attribute_value:  # Only check if attribute_value is not empty or None
+                match[f"attributes.{attribute_name}"] = attribute_value
+
     pipeline.append({
         "$match": match
     })
     pipeline.extend([
         {
-            "$lookup" : {
-                "from" : "product_category",
-                "localField" : "category_id",
-                "foreignField" : "_id",
-                "as" : "product_category_ins"
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "product_category_ins"
             }
         },
         {
-            "$unwind" : "$product_category_ins"
+            "$unwind": "$product_category_ins"
         },
         {
-            "$project" : {
-                "_id" : 0,
-                "id" : {"$toString" : "$_id"},
-                "image_url" : {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "image_url": {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
                 "sku": {"$ifNull": ["$sku_number_product_code_item_number", "N/A"]},
                 "name": {"$ifNull": ["$product_name", "N/A"]},
-                "category" : "$product_category_ins.name",
+                "category": "$product_category_ins.name",
                 "price": {"$ifNull": [{"$round": ["$list_price", 2]}, 0.0]},
-                "mpn" : {"$ifNull": ["$mpn", "N/A"]},
-                "brand_name" : {"$ifNull": ["$brand_name", "N/A"]},
-                
+                "mpn": {"$ifNull": ["$mpn", "N/A"]},
+                "brand_name": {"$ifNull": ["$brand_name", "N/A"]},
             }
         },
-       
     ])
-    
+
     product_list = list(product.objects.aggregate(*(pipeline)))
-    data=dict()
-    data['products']= product_list
+    data = dict()
+    data['products'] = product_list
     return data
 
 
@@ -573,22 +577,27 @@ def regenerateAiContents(request):
                 if ins['checked'] == True:
                     original_features = "\n".join(f"- {f}" for f in ins['value'])
                     prompt = f"""
-                    You are an expert at rewriting product features.
+                    You are an expert at rewriting ecommerce product features.
 
-                    Given the list of bullet-point product features below, please **{selected_option.lower()}**. Keep the format as bullet points.
+                    Please {selected_option.lower()} the following list of product features. Return only **one revised version** as a clean bullet-point list. Each bullet should be on its own line. Do not include any extra notes, explanations, or markdown formatting.
 
-                    🔧 Original Features:
+                    Original Features:
                     {original_features}
 
-                    ✍️ Updated Features:
+                    Updated Features:
                     """
+
                     response_text = ask_chatgpt(prompt)
+
+                    # Clean and extract bullet points
                     updated_lines = [
-                        line.strip("-•0123456789. ").strip()
-                        for line in response_text.split("\n")
+                        line.strip("-•*0123456789. ").strip()
+                        for line in response_text.splitlines()
                         if line.strip()
                     ]
+
                     ins["value"] = updated_lines
+
 
             result["features"] = regenerate_features
         if regenerate_description:
