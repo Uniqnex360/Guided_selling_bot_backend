@@ -261,6 +261,7 @@ def productList(request):
             "$match": {
                 "$or": [
                     {"brand_name": {"$regex": search_query, "$options": "i"}},
+                    {"product_category_ins.name": {"$regex": search_query, "$options": "i"}},
                     {"sku_number_product_code_item_number": {"$regex": search_query, "$options": "i"}},
                     {"mpn": {"$regex": search_query, "$options": "i"}},
                     {"model": {"$regex": search_query, "$options": "i"}},
