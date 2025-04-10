@@ -12,6 +12,8 @@ import requests
 from django.conf import settings
 from openai import OpenAI
 from openai import OpenAIError
+from spellchecker import SpellChecker
+
 
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
@@ -222,8 +224,15 @@ def productList(request):
     match = {}
     pipeline = []
     json_request = JSONParser().parse(request)
+    search_query = json_request.get("search_query")
     category_id = json_request.get("category_id")
     attributes = json_request.get("attributes", {})
+    search_query = search_query.strip()
+    try:
+        spell = SpellChecker()
+        search_query = ' '.join([spell.correction(word) for word in search_query.split()])
+    except:
+        pass
 
     if category_id is not None and category_id != "":
         match["category_id"] = ObjectId(category_id)
@@ -247,6 +256,59 @@ def productList(request):
         },
         {
             "$unwind": "$product_category_ins"
+        },
+        {
+            "$match": {
+                "$or": [
+                    {"brand_name": {"$regex": search_query, "$options": "i"}},
+                    {"sku_number_product_code_item_number": {"$regex": search_query, "$options": "i"}},
+                    {"mpn": {"$regex": search_query, "$options": "i"}},
+                    {"model": {"$regex": search_query, "$options": "i"}},
+                    {"upc_ean": {"$regex": search_query, "$options": "i"}},
+                    {"product_name": {"$regex": f'^{search_query}$', "$options": "i"}},
+                    {
+                        "$expr": {
+                            "$gt": [
+                                {
+                                    "$size": {
+                                        "$filter": {
+                                            "input": { "$objectToArray": "$attributes" },
+                                            "cond": {
+                                                "$or": [
+                                                    # Check if key matches the search query
+                                                    {
+                                                        "$and": [
+                                                            { "$eq": [{ "$type": "$$this.k" }, "string"] },
+                                                            { "$regexMatch": { "input": "$$this.k", "regex": search_query, "options": "i" } }
+                                                        ]
+                                                    },
+                                                    # Check if string values match the search query
+                                                    {
+                                                        "$and": [
+                                                            { "$eq": [{ "$type": "$$this.v" }, "string"] },
+                                                            { "$regexMatch": { "input": "$$this.v", "regex": search_query, "options": "i" } }
+                                                        ]
+                                                    },
+                                                    # Check if numeric values match the search query (by converting to string)
+                                                    {
+                                                        "$and": [
+                                                            { "$in": [{ "$type": "$$this.v" }, ["int", "long", "double", "decimal"]] },
+                                                            { "$regexMatch": { "input": { "$toString": "$$this.v" }, "regex": search_query, "options": "i" } }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                },
+                                0
+                            ]
+                        }
+                    },
+                    {"long_description": {"$regex": search_query, "$options": "i"}},
+                    {"features": {"$regex": search_query, "$options": "i"}},                    
+                ]
+            }
         },
         {
             "$project": {
@@ -705,3 +767,23 @@ def remove_nan_from_filters():
 
     return True
 
+
+@csrf_exempt
+def updategeneratedContent(request):
+    data = dict()
+    json_request = JSONParser().parse(request)
+    product_id = json_request.get("product_id")
+    title = json_request.get("title")
+    features = json_request.get("features")
+    description = json_request.get("description")
+
+    product_obj = product.objects.get(id=product_id)
+    if title != None:
+        product_obj.ai_generated_title = title
+    if features != None:
+        product_obj.ai_generated_features = features
+    if description != None:
+        product_obj.ai_generated_description = description
+    product_obj.save()
+    
+    return data
