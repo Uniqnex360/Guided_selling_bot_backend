@@ -64,6 +64,9 @@ def productDetails(product_id):
             "from_the_manufacture" : {"$ifNull": ["$from_the_manufacture", "N/A"]},
             "visible" : {"$ifNull": ["$visible", False]},
             "end_level_category" : {"$ifNull": ["$product_category_ins.name", "N/A"]},
+            "ai_generated_title" : {"$ifNull": ["$ai_generated_title", []]},
+            "ai_generated_description" : {"$ifNull": ["$ai_generated_description", []]},
+            "ai_generated_features" : {"$ifNull": ["$ai_generated_features", []]},
            }
         }
     ]

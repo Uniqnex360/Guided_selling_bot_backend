@@ -77,6 +77,9 @@ class product(Document):
     old_names = fields.ListField(fields.StringField())
     old_description = fields.ListField(fields.StringField())
     old_features = fields.ListField(fields.ListField(fields.StringField()))
+    ai_generated_title = fields.ListField(fields.DictField())
+    ai_generated_description = fields.ListField(fields.DictField())
+    ai_generated_features = fields.ListField(fields.DictField())
 
 # import pandas as pd
 

@@ -314,6 +314,7 @@ def fetchProductQuestions(request,product_id):
 def fetchAiContent(request):
     result = {}
     if request.method == "POST":
+        update_obj = dict()
         data = json.loads(request.body)
         product_id = data.get("product_id")
         fetch_title = data.get("title")
@@ -362,6 +363,7 @@ def fetchAiContent(request):
                 modify_data['checked'] = False
                 process_list.append(modify_data)
             result["title"] = process_list
+            update_obj['ai_generated_title'] = result["title"]
  
         if fetch_features:
             prompt_info = f"""
@@ -417,6 +419,7 @@ def fetchAiContent(request):
                 modify_data['checked'] = False
                 process_list.append(modify_data)
             result["features"] = process_list
+            update_obj['ai_generated_features'] = result["features"]
  
         if fetch_description:
             prompt_info = f"""
@@ -462,6 +465,9 @@ def fetchAiContent(request):
                 modify_data['checked'] = False
                 process_list.append(modify_data)
             result["description"] = process_list
+            update_obj['ai_generated_description'] = result["description"]
+        if update_obj != {}:
+            DatabaseModel.update_documents(product.objects,{"id" : product_id},update_obj)
     return result
 
 
@@ -529,8 +535,9 @@ def fetchPromptList(request):
 @csrf_exempt
 def regenerateAiContents(request):
     if request.method == "POST":
+        update_obj = dict()
         data = json.loads(request.body)
-
+        product_id = data.get("product_id")
         selected_option = data.get("option")  # e.g., "Improve writing", "Make longer", etc.
         regenerate_title = data.get("title")  # This is the selected title to regenerate (optional)
         regenerate_features = data.get("features")  # List of selected features (optional)
@@ -571,6 +578,7 @@ def regenerateAiContents(request):
                     ins['value'] =  titles
                 
             result["title"] = regenerate_title
+            update_obj['ai_generated_title'] = result["title"]
 
         if regenerate_features:
             for ins in regenerate_features:
@@ -600,6 +608,7 @@ def regenerateAiContents(request):
 
 
             result["features"] = regenerate_features
+            update_obj['ai_generated_features'] = result["features"]
         if regenerate_description:
             for ins in regenerate_description:
                 if ins['checked'] == True:
@@ -616,7 +625,9 @@ def regenerateAiContents(request):
                     result_description = ask_chatgpt(prompt)
                     ins["value"] = result_description
             result['description'] = regenerate_description
-
+            update_obj['ai_generated_description'] = result["description"]
+        if update_obj != {}:
+            DatabaseModel.update_documents(product.objects,{"id" : product_id},update_obj)
         return result
 
 

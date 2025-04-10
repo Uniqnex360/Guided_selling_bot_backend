@@ -7,7 +7,11 @@ from openai.types.chat import ChatCompletionMessage
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
 def get_product_assistant_response(user_query, product_id):
-    product_info = str(productDetails(product_id))
+    products = productDetails(product_id)
+    del products["ai_generated_description"]
+    del products["ai_generated_title"]
+    del products["ai_generated_features"]
+    product_info = str(products)
 
     prompt = f"""
     You are an AI assistant for an e-commerce website. Your task is to provide clear and relevant answers based on the given product details.
