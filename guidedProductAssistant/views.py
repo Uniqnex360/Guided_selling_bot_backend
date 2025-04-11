@@ -332,8 +332,21 @@ def productList(request):
     return data
 
 
+def convertToTrue(data):
+    updated_list = list()
+    for ins in data:
+        if ins['checked'] == True:
+            ins['checked'] = False
+            updated_list.append(ins)
+        else:
+            updated_list.append(ins)
+    return updated_list
+
 def productDetail(request,product_id):
     product_list = productDetails(product_id)
+    product_list['ai_generated_title'] = convertToTrue(product_list['ai_generated_title'])
+    product_list['ai_generated_description'] = convertToTrue(product_list['ai_generated_description'])
+    product_list['ai_generated_features'] = convertToTrue(product_list['ai_generated_features'])
     data=dict()
     data['product']= product_list
     return data
