@@ -238,9 +238,9 @@ def productList(request):
         match["category_id"] = ObjectId(category_id)
 
     if attributes and isinstance(attributes, dict):
-        for attribute_name, attribute_value in attributes.items():
-            if attribute_value:  # Only check if attribute_value is not empty or None
-                match[f"attributes.{attribute_name}"] = attribute_value
+        for attribute_name, attribute_values in attributes.items():
+            if attribute_values and isinstance(attribute_values, list):  # Ensure attribute_values is a list
+                match[f"attributes.{attribute_name}"] = {"$in": attribute_values}  # Use $in for list matching
 
     pipeline.append({
         "$match": match
