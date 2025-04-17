@@ -116,5 +116,7 @@ def category_filters_view(request):
                 if pd.isna(value) or value == float('nan'):
                     f[key] = None
             filters_list.append(f)
+    # Sort filters_list by name in ascending order
+    filters_list = sorted(filters_list, key=lambda x: x.get('name', '').lower())
     return {"category_id": category_id, "category_name": category_name, "filters": filters_list}
     
