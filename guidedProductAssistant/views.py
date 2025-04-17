@@ -390,22 +390,19 @@ def fetchProductQuestions(request,product_id):
 def fetchAiContent(request):
     result = {}
     if request.method == "POST":
-        update_obj = dict()
+        update_obj = {}
         data = json.loads(request.body)
         product_id = data.get("product_id")
         fetch_title = data.get("title")
         fetch_features = data.get("features")
         fetch_description = data.get("description")
- 
+
         product_obj = product.objects.get(id=product_id)
- 
         brand_name = product_obj.brand_name
         product_name = product_obj.product_name
         sku = product_obj.sku_number_product_code_item_number
         mpn = getattr(product_obj, 'mpn', '')
- 
-        result = {}
- 
+
         def chatgpt_response(prompt):
             response = client.chat.completions.create(
                 model="gpt-4",
@@ -413,7 +410,7 @@ def fetchAiContent(request):
                 temperature=0.7,
             )
             return response.choices[0].message.content
- 
+
         if fetch_title:
             prompt_info = f"""
             Product Name: {product_name}
@@ -422,25 +419,50 @@ def fetchAiContent(request):
             MPN: {mpn}
             """
             prompt = f"""
-            Generate exactly 3 catchy, professional, and engaging product titles for the product below. Each title should be on its own line and the title should contain key characteristics of product, & it should contain around 150-170 characters, & also brand name, model  should be included. Use a friendly US marketing tone.
- 
+            Generate Product Content Based on Specific Sources and instruction
+
+            Product:
             {prompt_info}
+            
+            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
+            
+            Product Content Requirements
+
+            Product Title:
+            Follow this structure:
+            [Brand Name] [Model Number] [Product Type] [2-3 Key Specifications] - [Primary Benefit]
+            Use Title Case (Capitalize Each Major Word)
+            Do not use punctuation marks (commas, hyphens, colons, etc.)
+            Avoid all caps
+            Include the primary keyword near the beginning
+            Limit to 120 characters maximum
+            End with a clear, concise benefit or distinctive feature when appropriate (optional)
+            Match the style like this:
+
+                Makita 6407 3/8 Inch Drill 4.9 Amp Variable Speed Quiet Operation
+                Makita 6407 3/8 Inch Corded Drill 4.9 Amp 2500 Rpm Ergonomic Design
+                Makita 6407 3/8 Inch Variable Speed Drill 4.9 Amp Reversible Motor
+
+            Instructions for Content Creation
+            Provide 3 concise variations of the chosen content type (product title).
+            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
+            Supplement missing details using other listed sources while maintaining consistency across all content.
+            Provide three concise variations of the chosen content type (product title).
+            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
             """
             response_text = chatgpt_response(prompt)
-            result["title"] = [
-                line.strip("-•1234567890. ").strip()
+            print("title..............................", response_text)
+
+            lines = [
+                line.strip("•-0123456789. ").strip()
                 for line in response_text.strip().split("\n")
                 if line.strip()
-            ][:3]
-            process_list = list()
-            for i in result["title"]:
-                modify_data = dict()
-                modify_data['value'] = i
-                modify_data['checked'] = False
-                process_list.append(modify_data)
-            result["title"] = process_list
-            update_obj['ai_generated_title'] = result["title"]
- 
+            ]
+            variations = [line for line in lines if len(line.split()) > 2][:3]
+
+            result["title"] = [{"value": t, "checked": False} for t in variations]
+            update_obj["ai_generated_title"] = result["title"]
+
         if fetch_features:
             prompt_info = f"""
             Product Name: {product_name}
@@ -450,53 +472,48 @@ def fetchAiContent(request):
             Existing Feature Text (if any): {product_obj.features}
             """
             prompt = f"""
-            You are a product content specialist helping to generate high-quality product feature bullet points.
- 
-            Based on the information below, generate **three distinct variations** of the product's feature list. Each variation should be written as a clean bullet list, containing **a minimum of 3 and a maximum of 8 unique features**.
+            Generate Product Content Based on Specific Sources and instruction
+
+            Product:
+            {prompt_info}
             
-            📝 **Guidelines:**
-            - Start each variation with: "Variation 1:", "Variation 2:", and "Variation 3:"
-            - Each bullet point should highlight a **specific product benefit**, **key functionality**, **physical attribute**, or **typical application**.
-            - **Avoid repeating** phrasing or points between variations. Each variation should feel unique.
-            - Use clear, professional US-English language with a tone suitable for ecommerce platforms like Amazon, Grainger, and Home Depot.
-            - Focus on helpful, actionable details that help the user understand what makes this product valuable.
-            - If existing features are provided, feel free to refine or rephrase them for clarity and usefulness.
-            You are a product content expert tasked with writing a concise and technically accurate product description.
+            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
             
-            Based on the following product data, generate a product description of **200-220 words** that highlights the product's **core functionality, technical specifications, typical use cases, and key attributes**
-            
-            🛑 Do NOT include:
-            - Any marketing buzzwords or promotional claims (e.g., "best-in-class", "game-changer", "top-rated").
-            - Any packaging details (e.g., pack size, box contents, number of units).
-            - Any customer testimonials, offers, or pricing information.
-            
-            ✅ Do INCLUDE:
-            - Clear, factual information useful to a buyer or technician.
-            - How and where the product is typically used (if applicable).
-            - Unique technical features or specifications that differentiate this product.
-            
-            Write in a **neutral, professional US-English tone**, suitable for ecommerce platforms and distributor catalogs like Grainger, Fastenal, or MSC.{prompt_info}
+            Product Content Requirements
+            Features:
+            List 8-10 key product features in bullet point format:
+            Lead with the benefit, then explain the feature.
+            Begin each bullet with an action verb or highlight a specific metric.
+            Include compatibility, dimensions, materials, and performance metrics when relevant.
+            Limit each bullet to 1-2 concise sentences.
+
+            Instructions for Content Creation
+            Provide 3 concise variations of the chosen content type (features).
+            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
+            Supplement missing details using other listed sources while maintaining consistency across all content.
+            Provide three concise variations of the chosen content type (features).
+            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
             """
             response_text = chatgpt_response(prompt)
-            variations_raw = response_text.strip().split("Variation")
+            print("variations_raw Features............................", response_text)
+
+            raw_blocks = response_text.strip().split("Variation")
             variations = []
- 
-            for block in variations_raw[1:]:
+
+            for block in raw_blocks[1:]:
                 lines = block.strip().split("\n")
-                feature_lines = [line.strip("-•0123456789. ").strip() for line in lines if line.strip().startswith("-")]
-                if feature_lines:
-                    variations.append(feature_lines)
- 
-            result["features"] = variations[:3]
-            process_list = list()
-            for i in result["features"]:
-                modify_data = dict()
-                modify_data['value'] = i
-                modify_data['checked'] = False
-                process_list.append(modify_data)
-            result["features"] = process_list
-            update_obj['ai_generated_features'] = result["features"]
- 
+                features = [
+                    line.strip("•-0123456789. ").strip()
+                    for line in lines if line.strip().startswith(("-", "•"))
+                ]
+                if features:
+                    variations.append(features)
+
+            result["features"] = [
+                {"value": features, "checked": False} for features in variations[:3]
+            ]
+            update_obj["ai_generated_features"] = result["features"]
+
         if fetch_description:
             prompt_info = f"""
             Product Name: {product_name}
@@ -506,44 +523,66 @@ def fetchAiContent(request):
             Existing Description (if any): {product_obj.long_description}
             """
             prompt = f"""
-            Generate exactly 3 product descriptions for the product below.
- 
-            Each variation should:
-            - Be 2 paragraphs
-            - Have 80–100 words total
-            - Focus on product benefits, usage, features
-            - Be clear, professional, and marketing-friendly (US tone)
-            - Avoid generic fluff or repeated points
- 
-            Clearly label each variation like:
-            Variation 1:
-            [Paragraph 1]
- 
-            [Paragraph 2]
- 
+            Generate Product Content Based on Specific Sources and instruction
+
+            Product:
             {prompt_info}
+            
+            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
+            
+            Product Content Requirements
+
+            Description:
+            Create a 2-paragraph description (80-100 words total):
+            Paragraph 1: Introduce the product, its primary purpose, and main benefit to the user.
+            Paragraph 2: Highlight 2-3 standout features and explain how they solve specific user problems.
+            Use active voice and direct addressing ("you" language).
+            Include primary and secondary keywords naturally.
+            Focus on benefits rather than specifications.
+
+            Instructions for Content Creation
+            Provide 3 concise variations of the chosen content type (descriptions).
+            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
+            Supplement missing details using other listed sources while maintaining consistency across all content.
+            Provide three concise variations of the chosen content type (descriptions).
+            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
             """
             response_text = chatgpt_response(prompt)
-            blocks = response_text.strip().split("Variation")
+            print("blocks description............................", response_text)
+
+            # Split by 'Variation' but skip any leading instructional or template text
+            description_blocks = response_text.strip().split("Variation")
             descriptions = []
- 
-            for block in blocks[1:]:
-                parts = block.strip().split("\n\n")
-                paragraph_texts = [p.strip() for p in parts if p.strip()]
-                if len(paragraph_texts) >= 2:
-                    descriptions.append("\n\n".join(paragraph_texts[:2]))
- 
-            result["description"] = descriptions[:3]
-            process_list = list()
-            for i in result["description"]:
-                modify_data = dict()
-                modify_data['value'] = i
-                modify_data['checked'] = False
-                process_list.append(modify_data)
-            result["description"] = process_list
-            update_obj['ai_generated_description'] = result["description"]
-        if update_obj != {}:
-            DatabaseModel.update_documents(product.objects,{"id" : product_id},update_obj)
+
+            for block in description_blocks:
+                block = block.strip()
+                if not block or not any(kw in block.lower() for kw in ["thread", "finish", "material", "nut", "wheel"]):
+                    # Skip non-actual content blocks like templates
+                    continue
+
+                # Remove leading digits like '1:', '2:' etc
+                block = block.lstrip("1234567890:. ").strip()
+
+                # Split by paragraphs
+                paragraphs = [p.strip() for p in block.split("\n\n") if p.strip()]
+                if len(paragraphs) >= 2:
+                    descriptions.append("\n\n".join(paragraphs[:2]))
+                else:
+                    # fallback if only 1 paragraph found
+                    descriptions.append("\n\n".join(paragraphs))
+
+            # Limit to 3 variations
+            result["description"] = [
+                {"value": desc, "checked": False} for desc in descriptions[:3]
+            ]
+            update_obj["ai_generated_description"] = result["description"]
+
+
+
+        if update_obj:
+            print("update_obj..........",update_obj)
+            DatabaseModel.update_documents(product.objects, {"id": product_id}, update_obj)
+
     return result
 
 
