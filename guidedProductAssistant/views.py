@@ -385,7 +385,7 @@ def fetchProductQuestions(request,product_id):
     product_questions_list = list(product_questions.objects.aggregate(*(pipeline)))
     return product_questions_list
 
-
+import re
 @csrf_exempt
 def fetchAiContent(request):
     result = {}
@@ -527,51 +527,49 @@ def fetchAiContent(request):
 
             Product:
             {prompt_info}
-            
-            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
-            
-            Product Content Requirements
+
+            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com, Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
+
+            Product Content Requirements:
 
             Description:
-            Create a 2-paragraph description (80-100 words total):
-            Paragraph 1: Introduce the product, its primary purpose, and main benefit to the user.
-            Paragraph 2: Highlight 2-3 standout features and explain how they solve specific user problems.
-            Use active voice and direct addressing ("you" language).
-            Include primary and secondary keywords naturally.
-            Focus on benefits rather than specifications.
+            Create exactly 3 variations. Each variation must have 2 paragraphs.
+            - Paragraph 1: Introduce the product, its primary purpose, and main benefit to the user.
+            - Paragraph 2: Highlight 2-3 standout features and explain how they solve specific user problems.
+            Use active voice and direct addressing ("you" language). Include primary and secondary keywords naturally. Focus on benefits rather than specifications.
 
-            Instructions for Content Creation
-            Provide 3 concise variations of the chosen content type (descriptions).
-            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
-            Supplement missing details using other listed sources while maintaining consistency across all content.
-            Provide three concise variations of the chosen content type (descriptions).
-            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
+            ⚠️ Output Format (strictly follow this):
+            Variation 1:
+            <paragraph 1>
+
+            <paragraph 2>
+
+            Variation 2:
+            <paragraph 1>
+
+            <paragraph 2>
+
+            Variation 3:
+            <paragraph 1>
+
+            <paragraph 2>
+
+            DO NOT use headings like "Description:" or "Paragraph 1:". Just use the format above exactly.
             """
             response_text = chatgpt_response(prompt)
             print("blocks description............................", response_text)
 
-            # Split by 'Variation' but skip any leading instructional or template text
-            description_blocks = response_text.strip().split("Variation")
+            # Match blocks like 'Variation 1:\n<text>\n\n<text>'
+            matches = re.findall(r"Variation\s+\d+:\s*(.*?)(?=\nVariation|\Z)", response_text, re.DOTALL)
             descriptions = []
 
-            for block in description_blocks:
-                block = block.strip()
-                if not block or not any(kw in block.lower() for kw in ["thread", "finish", "material", "nut", "wheel"]):
-                    # Skip non-actual content blocks like templates
-                    continue
-
-                # Remove leading digits like '1:', '2:' etc
-                block = block.lstrip("1234567890:. ").strip()
-
-                # Split by paragraphs
-                paragraphs = [p.strip() for p in block.split("\n\n") if p.strip()]
+            for match in matches:
+                paragraphs = [p.strip() for p in match.strip().split("\n\n") if p.strip()]
                 if len(paragraphs) >= 2:
                     descriptions.append("\n\n".join(paragraphs[:2]))
                 else:
-                    # fallback if only 1 paragraph found
                     descriptions.append("\n\n".join(paragraphs))
 
-            # Limit to 3 variations
             result["description"] = [
                 {"value": desc, "checked": False} for desc in descriptions[:3]
             ]
