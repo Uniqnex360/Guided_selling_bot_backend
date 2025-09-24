@@ -61,11 +61,13 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
-    "https://guided-selling-assistant.onrender.com"
+    "https://guided-selling-assistant.onrender.com",
+    "https://guided-selling-bot-frontend.vercel.app"
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
-    "https://guided-selling-assistant.onrender.com"
+    "https://guided-selling-assistant.onrender.com",
+    "https://guided-selling-bot-frontend.vercel.app"
 ]
 
 
