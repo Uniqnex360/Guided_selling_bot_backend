@@ -16,6 +16,74 @@ from openai import OpenAIError
 from spellchecker import SpellChecker
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
+from guidedProductAssistant.models import User
+from django.contrib.auth.hashers import make_password, check_password
+import jwt
+from datetime import datetime, timedelta
+from django.conf import settings
+from mongoengine.errors import NotUniqueError
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import jwt
+from django.conf import settings
+from rest_framework.response import Response
+from rest_framework import status
+from functools import wraps
+
+def jwt_required(view_func):
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({'error': 'Authorization header missing or invalid'}, status=status.HTTP_401_UNAUTHORIZED)
+        token = auth_header.split(' ')[1]
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            request.user_payload = payload  # You can access user info in your view
+        except jwt.ExpiredSignatureError:
+            return Response({'error': 'Token expired'}, status=status.HTTP_401_UNAUTHORIZED)
+        except jwt.InvalidTokenError:
+            return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view
+
+@csrf_exempt
+@api_view(['POST'])
+def register(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+    if not email or not password:
+        return Response({'error': 'Email and password required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        user = User(
+            email=email,
+            password=make_password(password)
+        )
+        user.save()
+        return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED)
+    except NotUniqueError:
+        return Response({'error': 'Email already exists'}, status=status.HTTP_400_BAD_REQUEST)
+
+@csrf_exempt
+@api_view(['POST'])
+def login(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+    try:
+        user = User.objects.get(email=email)
+        if not check_password(password, user.password):
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        payload = {
+            'user_id': str(user.id),
+            'email': user.email,
+            'exp': datetime.utcnow() + timedelta(hours=24)
+        }
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+        return Response({'token': token})
+    except User.DoesNotExist:
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
 def chatbot_view(request):
     if request.method == "POST":
         data=json.loads(request.body)  
@@ -179,7 +247,10 @@ def update_product_content(request):
         product_obj.description = selected_content  # or product.features based on selection
         product_obj.save()
         return JsonResponse({"status": "success"})
+    
+
 @csrf_exempt
+
 def productList(request):
     match = {}
     pipeline = []

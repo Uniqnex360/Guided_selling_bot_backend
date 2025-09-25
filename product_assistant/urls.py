@@ -1,47 +1,32 @@
-"""
-URL configuration for product_assistant project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.urls import path
-from guidedProductAssistant.views import product_list, product_detail, chatbot_view,fetch_ai_content,update_product_content, productList, productDetail,chatbotView, fetchAiContent, fetchProductQuestions, updateProductContent, fetchPromptList, regenerateAiContents, script, updategeneratedContent
-
-from guidedProductAssistant.product_finder import fourth_level_categories_view,category_filters_view
+from guidedProductAssistant.views import (
+    product_list, product_detail, chatbot_view, fetch_ai_content, update_product_content,
+    productList, productDetail, chatbotView, fetchAiContent, fetchProductQuestions,
+    updateProductContent, fetchPromptList, regenerateAiContents, script, updategeneratedContent,
+    register, login
+)
+from guidedProductAssistant.product_finder import fourth_level_categories_view, category_filters_view
 
 urlpatterns = [
-    path("", product_list, name="product_list"),  # Home page
-    path("product/<product_id>/", product_detail, name="product_detail"),  # Product details
-    path("chat/", chatbot_view, name="chatbot_view"),  # Chatbot API
-    path("fetch_ai_content/", fetch_ai_content, name="fetch_ai_content"),  # Product details
-    path("update_product_content/", update_product_content, name="update_product_content"),  # Chatbot API
-
-    path("productList/", productList, name="productList"),  # Chatbot API
-    path("productDetail/<product_id>/", productDetail, name="productDetail"),  # Product details
-    path("chatbotView/", chatbotView, name="chatbotView"),  # Chatbot API
-
-    path("fetchAiContent/", fetchAiContent, name="fetchAiContent"),  # Product details
-    path("fetchProductQuestions/<product_id>/", fetchProductQuestions, name="fetchProductQuestions"),  # Product details
-
-    path("updateProductContent/", updateProductContent, name="updateProductContent"),  # Chatbot API
-    path("fetchPromptList/", fetchPromptList, name="fetchPromptList"),  # Chatbot API
-    path("regenerateAiContents/", regenerateAiContents, name="regenerateAiContents"),  # Chatbot API
-    path("updategeneratedContent/", updategeneratedContent, name="updategeneratedContent"),  # Chatbot API
-
-    #Product Finder
+    path("", product_list, name="product_list"),
+    path("product/<product_id>/", product_detail, name="product_detail"),
+    path("chat/", chatbot_view, name="chatbot_view"),
+    path("fetch_ai_content/", fetch_ai_content, name="fetch_ai_content"),
+    path("update_product_content/", update_product_content, name="update_product_content"),
+    path("productList/", productList, name="productList"),
+    path("productDetail/<product_id>/", productDetail, name="productDetail"),
+    path("chatbotView/", chatbotView, name="chatbotView"),
+    path("fetchAiContent/", fetchAiContent, name="fetchAiContent"),
+    path("fetchProductQuestions/<product_id>/", fetchProductQuestions, name="fetchProductQuestions"),
+    path("updateProductContent/", updateProductContent, name="updateProductContent"),
+    path("fetchPromptList/", fetchPromptList, name="fetchPromptList"),
+    path("regenerateAiContents/", regenerateAiContents, name="regenerateAiContents"),
+    path("updategeneratedContent/", updategeneratedContent, name="updategeneratedContent"),
+    # Product Finder
     path("fourth_level_categories/", fourth_level_categories_view, name="fourth_level_categories"),
-    path("category_filters/", category_filters_view, name="category_filters"),  # Category filters
-
-    path("script/", script, name="script"),  # Script page
-
+    path("category_filters/", category_filters_view, name="category_filters"),
+    path("script/", script, name="script"),
+    # Auth endpoints
+    path('register/', register, name='register'),
+    path('login/', login, name='login'),
 ]

@@ -3,6 +3,8 @@ from mongoengine import fields, Document, EmbeddedDocument, EmbeddedDocumentFiel
 from datetime import datetime
 import pandas as pd
 from mongoengine import connect
+from mongoengine import StringField, BooleanField, DateTimeField
+from datetime import datetime
 MONGODB_HOST = "mongodb+srv://techteam:Tech!123@dataextraction.h6crc.mongodb.net/"
 MONGODB_NAME = "ai_assistant"
 connect(
@@ -10,6 +12,13 @@ connect(
     host=MONGODB_HOST,
     alias="default"
 )
+
+
+class User(Document):
+    email = StringField(required=True, unique=True)
+    password = StringField(required=True)  # Store hashed password!
+    is_active = BooleanField(default=True)
+    created_at = DateTimeField(default=datetime.utcnow)
 
 
 class brand(Document):
