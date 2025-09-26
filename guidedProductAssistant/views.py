@@ -31,6 +31,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from functools import wraps
 
+
 def jwt_required(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
@@ -366,13 +367,25 @@ def convertToTrue(data):
         else:
             updated_list.append(ins)
     return updated_list
-def productDetail(request,product_id):
+
+import re
+
+def strip_html_tags(text):
+    clean = re.compile('<.*?>')
+    return re.sub(clean, '', text)
+
+def productDetail(request, product_id):
     product_list = productDetails(product_id)
     product_list['ai_generated_title'] = convertToTrue(product_list['ai_generated_title'])
     product_list['ai_generated_description'] = convertToTrue(product_list['ai_generated_description'])
     product_list['ai_generated_features'] = convertToTrue(product_list['ai_generated_features'])
-    data=dict()
-    data['product']= product_list
+
+    # Remove HTML tags from features
+    if 'features' in product_list and isinstance(product_list['features'], list):
+        product_list['features'] = [strip_html_tags(f) for f in product_list['features']]
+
+    data = dict()
+    data['product'] = product_list
     return data
 def normalize_query(query:str)-> str:
     query=query.strip().lower()
