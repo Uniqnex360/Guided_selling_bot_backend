@@ -70,6 +70,7 @@ def register(request):
 @api_view(['POST'])
 def login(request):
     email = request.data.get('email')
+    print("email",email)
     password = request.data.get('password')
     try:
         user = User.objects.get(email=email)
