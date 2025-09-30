@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from mongoengine import connect
-
+import os
+from dotenv import load_dotenv
+load_dotenv()
 # MONGO_DB_NAME = "ai_assistant"
 # MONGO_HOST = "localhost"  # If using a local MongoDB
 # MONGO_PORT = 27017        # Default MongoDB port
@@ -31,8 +33,8 @@ from mongoengine import connect
 #     # authentication_source="admin"  # Change if needed
 # )
 
-MONGODB_HOST = "mongodb+srv://techteam:Tech!123@dataextraction.h6crc.mongodb.net/"
-MONGODB_NAME = "ai_assistant"
+MONGODB_HOST = os.getenv("MONGODB_HOST")
+MONGODB_NAME = os.getenv("MONGODB_NAME")
 connect(
     db=MONGODB_NAME,
     host=MONGODB_HOST,
@@ -173,4 +175,4 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-OPEN_AI_KEY = "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"
+OPEN_AI_KEY=os.getenv("OPEN_AI_KEY")
