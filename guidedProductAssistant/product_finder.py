@@ -84,8 +84,7 @@ def import_data(request):
 
     return {"message": "Data imported successfully."}
 
-
-
+@csrf_exempt
 def fourth_level_categories_view(request):
     categories_cursor = DatabaseModel.list_documents(product_category.objects, filter={"end_level": True})
     categories_list = []

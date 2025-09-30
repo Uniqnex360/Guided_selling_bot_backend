@@ -3,7 +3,7 @@ from guidedProductAssistant.views import (
     product_list, product_detail, chatbot_view, fetch_ai_content, update_product_content,
     productList, productDetail, chatbotView, fetchAiContent, fetchProductQuestions,
     updateProductContent, fetchPromptList, regenerateAiContents, script, updategeneratedContent,
-    register, login
+    register, login, brand_search, category_search,fetch_brands,fetch_price_range,fetch_categories
 )
 from guidedProductAssistant.product_finder import fourth_level_categories_view, category_filters_view
 
@@ -29,4 +29,9 @@ urlpatterns = [
     # Auth endpoints
     path('register/', register, name='register'),
     path('login/', login, name='login'),
+    path('brand_search/', brand_search, name='brand_search'),
+    path('category_search/', category_search, name='category_search'),  # Reusing category_filters_view for category_search
+    path('fetch_brands/', fetch_brands, name='fetch_brands'),  # Reusing brand_search for fetch_brands
+    path('fetch_categories/',fetch_categories, name= "fetch_categories"),
+    path('fetch_price_range/',fetch_price_range, name="fetch_price_range")
 ]

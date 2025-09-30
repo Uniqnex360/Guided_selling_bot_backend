@@ -73,17 +73,19 @@ def login(request):
     password = request.data.get('password')
     try:
         user = User.objects.get(email=email)
-        if not check_password(password, user.password):
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-        payload = {
-            'user_id': str(user.id),
-            'email': user.email,
-            'exp': datetime.utcnow() + timedelta(hours=24)
-        }
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
-        return Response({'token': token})
     except User.DoesNotExist:
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if not check_password(password, user.password):
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    payload = {
+        'user_id': str(user.id),
+        'email': user.email,
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+    return Response({'token': token})
 
 def chatbot_view(request):
     if request.method == "POST":
@@ -358,6 +360,9 @@ def productList(request):
     data = dict()
     data['products'] = product_list
     return data
+
+
+
 def convertToTrue(data):
     updated_list = list()
     for ins in data:
@@ -368,12 +373,209 @@ def convertToTrue(data):
             updated_list.append(ins)
     return updated_list
 
-import re
 
+@csrf_exempt
+@api_view(['GET'])
+def fetch_categories(request):
+    """
+    API to fetch all unique categories with their product count.
+    Optional search query: /fetch_categories/?q=searchterm
+    """
+    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
+    
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "category_info"
+            }
+        },
+        {"$unwind": "$category_info"},
+        {
+            "$match": {
+                "category_info.name": {"$regex": search_query, "$options": "i"} if search_query else {"$exists": True}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category_info._id",
+                "name": {"$first": "$category_info.name"},
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": {"$toString": "$_id"},
+                "name": 1,
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {"$sort": {"name": 1}}  # Sort alphabetically
+    ]
+    
+    categories = list(product.objects.aggregate(*pipeline))
+    return Response({"categories": categories})
+
+
+@csrf_exempt
+@api_view(['GET'])
+def fetch_brands(request):
+    """
+    API to fetch all unique brand names with their product count.
+    Optional search query: /fetch_brands/?q=searchterm
+    """
+    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
+    
+    pipeline = [
+        {
+            "$match": {
+                "brand_name": {"$regex": search_query, "$options": "i"} if search_query else {"$exists": True}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$brand_name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"name": 1}  # Sort alphabetically by brand name
+        }
+    ]
+    
+    brands = list(product.objects.aggregate(*pipeline))
+    return Response({"brands": brands})
+
+@csrf_exempt
+@api_view(['GET'])
+def fetch_price_range(request):
+    """
+    API to fetch the global min and max price across all products.
+    Optional category_id or brand_name filter: 
+    /fetch_price_range/?category_id=...&brand=...
+    """
+    category_id = request.GET.get('category_id')
+    brand_name = request.GET.get('brand')
+
+    match_stage = {}
+    if category_id:
+        match_stage["category_id"] = ObjectId(category_id)
+    if brand_name:
+        match_stage["brand_name"] = {"$regex": brand_name, "$options": "i"}
+
+    pipeline = []
+    if match_stage:
+        pipeline.append({"$match": match_stage})
+
+    pipeline.append({
+        "$group": {
+            "_id": None,
+            "min_price": {"$min": "$list_price"},
+            "max_price": {"$max": "$list_price"}
+        }
+    })
+
+    pipeline.append({
+        "$project": {
+            "_id": 0,
+            "min_price": {"$ifNull": ["$min_price", 0]},
+            "max_price": {"$ifNull": ["$max_price", 0]}
+        }
+    })
+
+    price_range = list(product.objects.aggregate(*pipeline))
+    return Response(price_range[0] if price_range else {"min_price": 0, "max_price": 0})
+
+
+
+@csrf_exempt
+@api_view(['GET'])
+def brand_search(request):
+    search_query = request.GET.get('q', '').strip()
+    pipeline = [
+        {
+            "$match": {
+                "brand_name": {"$regex": search_query, "$options": "i"}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$brand_name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"count": -1}
+        }
+    ]
+    brands = list(product.objects.aggregate(*pipeline))
+    return Response({"brands": brands})
+
+@csrf_exempt
+@api_view(['GET'])
+def category_search(request):
+    search_query = request.GET.get('q', '').strip()
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "category"
+            }
+        },
+        {"$unwind": "$category"},
+        {
+            "$match": {
+                "category.name": {"$regex": search_query, "$options": "i"}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category.name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"count": -1}
+        }
+    ]
+    categories = list(product.objects.aggregate(*pipeline))
+    return Response({"categories": categories})
+
+
+import re
 def strip_html_tags(text):
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
-
+@csrf_exempt
 def productDetail(request, product_id):
     product_list = productDetails(product_id)
     product_list['ai_generated_title'] = convertToTrue(product_list['ai_generated_title'])
