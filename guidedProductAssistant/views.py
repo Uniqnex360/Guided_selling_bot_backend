@@ -37,6 +37,9 @@ from rest_framework import status
 from functools import wraps
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
 
 
 
@@ -75,6 +78,22 @@ def import_products_from_excel(request):
             tmp_path = tmp.name
         save_products_from_excel(tmp_path)
         return Response({"status": "success", "message": "Products imported successfully"}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@csrf_exempt
+@api_view(['DELETE'])
+def delete_product(request, product_id):
+    """
+    API endpoint to delete a product by its product id.
+    """
+    try:
+        prod = product.objects(id=product_id).first()
+        if not prod:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        prod.delete()
+        return Response({"message": "Product deleted successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     

@@ -3,7 +3,7 @@ from guidedProductAssistant.views import (
     product_list, product_detail, chatbot_view, fetch_ai_content, update_product_content,
     productList, productDetail, chatbotView, fetchAiContent, fetchProductQuestions,
     updateProductContent, fetchPromptList, regenerateAiContents, script, updategeneratedContent,
-    register, login, brand_search, category_search,fetch_brands,fetch_price_range,fetch_categories,import_products_from_excel
+    register, login, brand_search, category_search,fetch_brands,fetch_price_range,fetch_categories,import_products_from_excel,delete_product
 )
 from guidedProductAssistant.product_finder import fourth_level_categories_view, category_filters_view
 
@@ -35,4 +35,5 @@ urlpatterns = [
     path('fetch_categories/',fetch_categories, name= "fetch_categories"),
     path('fetch_price_range/',fetch_price_range, name="fetch_price_range"),
     path('import_products_from_excel/', import_products_from_excel, name='import_products_from_excel'),
+    path("delete_product/<product_id>/", delete_product, name="delete_product"),
 ]
