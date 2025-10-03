@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from .ai_service import get_product_assistant_response
-from guidedProductAssistant.models import product, product_questions, prompt_type
+from guidedProductAssistant.models import product, product_questions, prompt_type, save_products_from_excel
 from guidedProductAssistant.utils import productDetails
 import json
 from rest_framework.parsers import JSONParser
@@ -14,6 +14,11 @@ from django.conf import settings
 from openai import OpenAI
 from openai import OpenAIError
 from spellchecker import SpellChecker
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import pandas as pd
+import tempfile
+from rest_framework.decorators import api_view
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
 from guidedProductAssistant.models import User
@@ -30,6 +35,9 @@ from django.conf import settings
 from rest_framework.response import Response
 from rest_framework import status
 from functools import wraps
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser
+
 
 
 def jwt_required(view_func):
@@ -48,6 +56,28 @@ def jwt_required(view_func):
             return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
         return view_func(request, *args, **kwargs)
     return _wrapped_view
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser])
+def import_products_from_excel(request):
+    """
+    API endpoint to import products from an uploaded Excel file.
+    POST with 'file' in request.FILES.
+    """
+    excel_file = request.FILES.get('file')
+    if not excel_file:
+        return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+            for chunk in excel_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        save_products_from_excel(tmp_path)
+        return Response({"status": "success", "message": "Products imported successfully"}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 
 @csrf_exempt
 @api_view(['POST'])
@@ -130,6 +160,8 @@ def product_list(request):
 def product_detail(request, product_id):
     product_list = productDetails(product_id)
     return render(request, "chatbot/product_detail.html", {"product": product_list})
+
+
 
 @csrf_exempt
 def fetch_ai_content(request):
