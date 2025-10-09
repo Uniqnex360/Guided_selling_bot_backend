@@ -419,7 +419,7 @@ def chatbotView(request):
                 return data
         normalized_query = user_query.strip()
         existing_answer = product_questions.objects(question=normalized_query).first()
-        print('existing answer', existing_answer)
+        # print(existing_answer.to_mongo()) 
         
         # CORRECT: Simple check and access for StringField
         if existing_answer and (existing_answer,'answer',None):
@@ -434,7 +434,7 @@ def chatbotView(request):
     except Exception as e:
         data['response'] = f"An unexpected error occurred: {str(e)}"
         return data
-
+    
 def fetchProductQuestions(request,product_id):
     product_obj = product.objects.get(id=product_id)
     pipeline = [
