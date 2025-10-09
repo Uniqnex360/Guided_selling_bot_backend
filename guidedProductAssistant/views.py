@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from .ai_service import get_product_assistant_response
-from guidedProductAssistant.models import product, product_questions, prompt_type
+from guidedProductAssistant.models import product, product_questions, prompt_type, save_products_from_excel
 from guidedProductAssistant.utils import productDetails
 import json
 from rest_framework.parsers import JSONParser
@@ -14,6 +14,11 @@ from django.conf import settings
 from openai import OpenAI
 from openai import OpenAIError
 from spellchecker import SpellChecker
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import pandas as pd
+import tempfile
+from rest_framework.decorators import api_view
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
 
 from guidedProductAssistant.models import User
@@ -30,6 +35,12 @@ from django.conf import settings
 from rest_framework.response import Response
 from rest_framework import status
 from functools import wraps
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
 
 
 def jwt_required(view_func):
@@ -48,6 +59,44 @@ def jwt_required(view_func):
             return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
         return view_func(request, *args, **kwargs)
     return _wrapped_view
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser])
+def import_products_from_excel(request):
+    """
+    API endpoint to import products from an uploaded Excel file.
+    POST with 'file' in request.FILES.
+    """
+    excel_file = request.FILES.get('file')
+    if not excel_file:
+        return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+            for chunk in excel_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        save_products_from_excel(tmp_path)
+        return Response({"status": "success", "message": "Products imported successfully"}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@csrf_exempt
+@api_view(['DELETE'])
+def delete_product(request, product_id):
+    """
+    API endpoint to delete a product by its product id.
+    """
+    try:
+        prod = product.objects(id=product_id).first()
+        if not prod:
+            return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        prod.delete()
+        return Response({"message": "Product deleted successfully"}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 
 @csrf_exempt
 @api_view(['POST'])
@@ -74,17 +123,19 @@ def login(request):
     password = request.data.get('password')
     try:
         user = User.objects.get(email=email)
-        if not check_password(password, user.password):
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-        payload = {
-            'user_id': str(user.id),
-            'email': user.email,
-            'exp': datetime.utcnow() + timedelta(hours=24)
-        }
-        token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
-        return Response({'token': token})
     except User.DoesNotExist:
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if not check_password(password, user.password):
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    payload = {
+        'user_id': str(user.id),
+        'email': user.email,
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+    return Response({'token': token})
 
 def chatbot_view(request):
     if request.method == "POST":
@@ -128,6 +179,8 @@ def product_list(request):
 def product_detail(request, product_id):
     product_list = productDetails(product_id)
     return render(request, "chatbot/product_detail.html", {"product": product_list})
+
+
 
 @csrf_exempt
 def fetch_ai_content(request):
@@ -359,6 +412,9 @@ def productList(request):
     data = dict()
     data['products'] = product_list
     return data
+
+
+
 def convertToTrue(data):
     updated_list = list()
     for ins in data:
@@ -369,12 +425,209 @@ def convertToTrue(data):
             updated_list.append(ins)
     return updated_list
 
-import re
 
+@csrf_exempt
+@api_view(['GET'])
+def fetch_categories(request):
+    """
+    API to fetch all unique categories with their product count.
+    Optional search query: /fetch_categories/?q=searchterm
+    """
+    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
+    
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "category_info"
+            }
+        },
+        {"$unwind": "$category_info"},
+        {
+            "$match": {
+                "category_info.name": {"$regex": search_query, "$options": "i"} if search_query else {"$exists": True}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category_info._id",
+                "name": {"$first": "$category_info.name"},
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": {"$toString": "$_id"},
+                "name": 1,
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {"$sort": {"name": 1}}  # Sort alphabetically
+    ]
+    
+    categories = list(product.objects.aggregate(*pipeline))
+    return Response({"categories": categories})
+
+
+@csrf_exempt
+@api_view(['GET'])
+def fetch_brands(request):
+    """
+    API to fetch all unique brand names with their product count.
+    Optional search query: /fetch_brands/?q=searchterm
+    """
+    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
+    
+    pipeline = [
+        {
+            "$match": {
+                "brand_name": {"$regex": search_query, "$options": "i"} if search_query else {"$exists": True}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$brand_name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"name": 1}  # Sort alphabetically by brand name
+        }
+    ]
+    
+    brands = list(product.objects.aggregate(*pipeline))
+    return Response({"brands": brands})
+
+@csrf_exempt
+@api_view(['GET'])
+def fetch_price_range(request):
+    """
+    API to fetch the global min and max price across all products.
+    Optional category_id or brand_name filter: 
+    /fetch_price_range/?category_id=...&brand=...
+    """
+    category_id = request.GET.get('category_id')
+    brand_name = request.GET.get('brand')
+
+    match_stage = {}
+    if category_id:
+        match_stage["category_id"] = ObjectId(category_id)
+    if brand_name:
+        match_stage["brand_name"] = {"$regex": brand_name, "$options": "i"}
+
+    pipeline = []
+    if match_stage:
+        pipeline.append({"$match": match_stage})
+
+    pipeline.append({
+        "$group": {
+            "_id": None,
+            "min_price": {"$min": "$list_price"},
+            "max_price": {"$max": "$list_price"}
+        }
+    })
+
+    pipeline.append({
+        "$project": {
+            "_id": 0,
+            "min_price": {"$ifNull": ["$min_price", 0]},
+            "max_price": {"$ifNull": ["$max_price", 0]}
+        }
+    })
+
+    price_range = list(product.objects.aggregate(*pipeline))
+    return Response(price_range[0] if price_range else {"min_price": 0, "max_price": 0})
+
+
+
+@csrf_exempt
+@api_view(['GET'])
+def brand_search(request):
+    search_query = request.GET.get('q', '').strip()
+    pipeline = [
+        {
+            "$match": {
+                "brand_name": {"$regex": search_query, "$options": "i"}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$brand_name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"count": -1}
+        }
+    ]
+    brands = list(product.objects.aggregate(*pipeline))
+    return Response({"brands": brands})
+
+@csrf_exempt
+@api_view(['GET'])
+def category_search(request):
+    search_query = request.GET.get('q', '').strip()
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "category"
+            }
+        },
+        {"$unwind": "$category"},
+        {
+            "$match": {
+                "category.name": {"$regex": search_query, "$options": "i"}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category.name",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$project": {
+                "id": "$_id",
+                "name": "$_id",
+                "count": 1,
+                "_id": 0
+            }
+        },
+        {
+            "$sort": {"count": -1}
+        }
+    ]
+    categories = list(product.objects.aggregate(*pipeline))
+    return Response({"categories": categories})
+
+
+import re
 def strip_html_tags(text):
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
-
+@csrf_exempt
 def productDetail(request, product_id):
     product_list = productDetails(product_id)
     product_list['ai_generated_title'] = convertToTrue(product_list['ai_generated_title'])
