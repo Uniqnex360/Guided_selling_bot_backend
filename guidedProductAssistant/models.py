@@ -12,6 +12,7 @@ connect(
     host=MONGODB_HOST,
     alias="default"
 )
+   
 
 
 class User(Document):
@@ -199,3 +200,41 @@ class filter(Document):
     )
     display_order = fields.IntField(default=0)
     config = fields.DictField(default={})
+def save_questions_from_excel(file_path):
+    df=pd.read_excel(file_path)
+    for _,row in df.iterrows():
+        category_names=[
+            str(row.get(f"C-{i}", "")).strip()
+            for i in range(1,6)
+            if pd.notna(row.get(f"C-{i}", "")) and str(row.get(f"C-{i}", "")).strip()
+            
+        ]
+        category_name=category_names[-1] if category_names else "Uncategorized"
+        category_obj=product_category.objects(name=category_name).first()
+        if not category_obj:
+            category_obj=product_category(
+                name=category_name,
+                breadcrumb=" -> ".join(category_names),
+                end_level=True
+            ).save()
+        question_txt=str(row.get("Questions","")).strip()
+        answer_txt=str(row.get("Answer","")).strip()
+        question_type=str(row.get('Question Type',"")).strip()
+        if not question_txt or not answer_txt:
+            continue
+        exisiting=product_questions.objects(
+            question=question_txt,
+            category_id=category_obj
+        ).first()
+        if exisiting:
+            print(f"Skipping duplicate questions:{question_txt}")
+            continue
+        product_questions(
+            question=question_txt,
+            answer=answer_txt,
+            question_type=question_type,
+            category_id=category_obj
+        ).save()
+        print(f"Saved question :{question_txt}")
+# save_questions_from_excel("/home/lexicon/Downloads/GSA-CHMarine-Questions & Answer (1).xlsx")
+       
