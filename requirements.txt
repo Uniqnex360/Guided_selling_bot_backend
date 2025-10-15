@@ -11,7 +11,7 @@ google-api-core==2.24.0
 google-api-python-client==2.156.0
 google-auth==2.37.0
 google-auth-httplib2==0.2.0
-google-generativeai==0.8.3
+google-generativeai==0.8.3  
 googleapis-common-protos==1.66.0
 mongoengine==0.29.1
 numpy==2.2.0
