@@ -1007,28 +1007,66 @@ def fetchAiContent(request):
             Existing Description (if any): {product_obj.long_description}
             """
             prompt = f"""
-            Generate Product Content Based on Specific Sources and instruction
-            Product:
-            {prompt_info}
-            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com, Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
-            Product Content Requirements:
-            Description:
-            Create exactly 3 variations. Each variation must have 2 paragraphs.
-            - Paragraph 1: Introduce the product, its primary purpose, and main benefit to the user.
-            - Paragraph 2: Highlight 2-3 standout features and explain how they solve specific user problems.
-            Use active voice and direct addressing ("you" language). Include primary and secondary keywords naturally. Focus on benefits rather than specifications.
-            ⚠️ Output Format (strictly follow this):
-            Variation 1:
-            <paragraph 1>
-            <paragraph 2>
-            Variation 2:
-            <paragraph 1>
-            <paragraph 2>
-            Variation 3:
-            <paragraph 1>
-            <paragraph 2>
-            DO NOT use headings like "Description:" or "Paragraph 1:". Just use the format above exactly.
-            """
+Generate exactly 3 product description variations.
+
+Product Information:
+{prompt_info}
+
+You are an experienced industrial product catalog editor.
+
+Requirements:
+
+- Write naturally as if a human product content specialist prepared the listing.
+- Use a factual, informative tone similar to Grainger, Würth, MSC Direct, or Fastenal.
+- Create exactly 3 variations.
+- Each variation must contain exactly 2 paragraphs.
+- Total length: 80–120 words.
+- Paragraph 1 should explain what the product is and its intended application.
+- Paragraph 2 should summarize important characteristics and typical use.
+- Only include information supported by the supplied product information.
+- If information is unavailable, omit it rather than inventing details.
+- Vary sentence structure naturally.
+
+Avoid:
+
+- Marketing language.
+- Promotional claims.
+- Directly addressing the reader ("you", "your").
+- Generic openings such as:
+  - Introducing...
+  - Meet...
+  - Whether you're...
+  - Designed for...
+  - Perfect for...
+  - Built to...
+  - Engineered to...
+- Buzzwords such as:
+  - Premium
+  - Superior
+  - Innovative
+  - High-quality
+  - Reliable solution
+  - Enhance productivity
+
+Before returning the answer, revise each variation once to remove wording that sounds promotional or AI-generated.
+
+Output exactly:
+
+Variation 1:
+<paragraph 1>
+
+<paragraph 2>
+
+Variation 2:
+<paragraph 1>
+
+<paragraph 2>
+
+Variation 3:
+<paragraph 1>
+
+<paragraph 2>
+"""
             response_text = chatgpt_response(prompt)
             print("blocks description............................", response_text)
             # Match blocks like 'Variation 1:\n<text>\n\n<text>'
