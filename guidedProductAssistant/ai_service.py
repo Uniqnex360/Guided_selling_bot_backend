@@ -4,7 +4,6 @@ from openai import OpenAI
 from openai import OpenAIError
 from openai.types.chat import ChatCompletionMessage
 import os
-client = OpenAI(api_key=settings.OPEN_AI_KEY)
 GOOGLE_GEMINI_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
 import google.generativeai as genai
 client = OpenAI(api_key=settings.OPEN_AI_KEY)

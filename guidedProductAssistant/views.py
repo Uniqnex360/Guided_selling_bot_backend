@@ -1,9 +1,24 @@
+from guidedProductAssistant.models import product_category, filter
+from math import isnan
+import threading
+from product_assistant.crud import DatabaseModel
+from rest_framework.parsers import MultiPartParser
+from rest_framework.decorators import api_view, parser_classes
+from functools import wraps
+from rest_framework import status
+from rest_framework.response import Response
+from mongoengine.errors import NotUniqueError
+from datetime import datetime, timedelta
+import jwt
+from django.contrib.auth.hashers import make_password, check_password
+from guidedProductAssistant.models import User
 from django.shortcuts import render
 from django.http import JsonResponse
 from .ai_service import get_product_assistant_response
-from guidedProductAssistant.models import product, product_questions, prompt_type, save_products_from_excel
+from guidedProductAssistant.models import brand, product, product_category, product_questions, prompt_type, save_products_from_excel
 from guidedProductAssistant.utils import productDetails
 import json
+import re
 from rest_framework.parsers import JSONParser
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -19,28 +34,8 @@ from django.http import JsonResponse
 import pandas as pd
 import tempfile
 from rest_framework.decorators import api_view
+from bson import ObjectId
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
-
-from guidedProductAssistant.models import User
-from django.contrib.auth.hashers import make_password, check_password
-import jwt
-from datetime import datetime, timedelta
-from django.conf import settings
-from mongoengine.errors import NotUniqueError
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-import jwt
-from django.conf import settings
-from rest_framework.response import Response
-from rest_framework import status
-from functools import wraps
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-
 
 
 def jwt_required(view_func):
@@ -51,7 +46,8 @@ def jwt_required(view_func):
             return Response({'error': 'Authorization header missing or invalid'}, status=status.HTTP_401_UNAUTHORIZED)
         token = auth_header.split(' ')[1]
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=['HS256'])
             request.user_payload = payload  # You can access user info in your view
         except jwt.ExpiredSignatureError:
             return Response({'error': 'Token expired'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -80,7 +76,7 @@ def import_products_from_excel(request):
         return Response({"status": "success", "message": "Products imported successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 
 @csrf_exempt
 @api_view(['DELETE'])
@@ -96,7 +92,7 @@ def delete_product(request, product_id):
         return Response({"message": "Product deleted successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 
 @csrf_exempt
 @api_view(['POST'])
@@ -115,11 +111,12 @@ def register(request):
     except NotUniqueError:
         return Response({'error': 'Email already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
+
 @csrf_exempt
 @api_view(['POST'])
 def login(request):
     email = request.data.get('email')
-    print("email",email)
+    print("email", email)
     password = request.data.get('password')
     try:
         user = User.objects.get(email=email)
@@ -137,49 +134,51 @@ def login(request):
     token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
     return Response({'token': token})
 
+
 def chatbot_view(request):
     if request.method == "POST":
-        data=json.loads(request.body)  
+        data = json.loads(request.body)
         user_query = data['message']
         product_id = data['product_id']
-        response_text = get_product_assistant_response(user_query,product_id)
+        response_text = get_product_assistant_response(user_query, product_id)
         return JsonResponse({"response": response_text})
     return render(request, "chatbot/chat.html")
+
 
 def product_list(request):
     pipeline = [
         {
-            "$lookup" : {
-                "from" : "product_category",
-                "localField" : "category_id",
-                "foreignField" : "_id",
-                "as" : "product_category_ins"
+            "$lookup": {
+                "from": "product_category",
+                "localField": "category_id",
+                "foreignField": "_id",
+                "as": "product_category_ins"
             }
         },
         {
-            "$unwind" : "$product_category_ins"
+            "$unwind": "$product_category_ins"
         },
         {
-            "$project" : {
-                "_id" : 0,
-                "id" : {"$toString" : "$_id"},
-                "image_url" : {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "image_url": {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
                 "sku": {"$ifNull": ["$sku_number_product_code_item_number", "N/A"]},
                 "name": {"$ifNull": ["$product_name", "N/A"]},
-                "category" : "$product_category_ins.name",
+                "category": "$product_category_ins.name",
                 "price": {"$ifNull": [{"$round": ["$list_price", 2]}, 0.0]},
-                "mpn" : {"$ifNull": ["$mpn", "N/A"]},
-                "brand_name" : {"$ifNull": ["$brand_name", "N/A"]},
+                "mpn": {"$ifNull": ["$mpn", "N/A"]},
+                "brand_name": {"$ifNull": ["$brand_name", "N/A"]},
             }
         },
     ]
     product_list = list(product.objects.aggregate(*(pipeline)))
     return render(request, "chatbot/products.html", {"products": product_list})
 
+
 def product_detail(request, product_id):
     product_list = productDetails(product_id)
     return render(request, "chatbot/product_detail.html", {"product": product_list})
-
 
 
 @csrf_exempt
@@ -196,11 +195,31 @@ def fetch_ai_content(request):
         sku = product_obj.sku_number_product_code_item_number
         mpn = getattr(product_obj, 'mpn', '')
         result = {}
+
         def chatgpt_response(prompt):
             response = client.chat.completions.create(
                 model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """
+You are a senior ecommerce product content editor.
+
+Write naturally and factually, like an experienced catalog editor at Grainger, Würth, Fastenal, or MSC.
+
+Never sound like AI-generated marketing copy.
+
+Avoid generic promotional phrases, exaggerated claims, and repetitive sentence structures.
+
+Only include information supported by the available product information.
+"""
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
             )
             return response.choices[0].message.content
         if fetch_title:
@@ -255,7 +274,8 @@ def fetch_ai_content(request):
             variations = []
             for block in variations_raw[1:]:
                 lines = block.strip().split("\n")
-                feature_lines = [line.strip("-•0123456789. ").strip() for line in lines if line.strip().startswith("-")]
+                feature_lines = [line.strip("-•0123456789. ").strip()
+                                 for line in lines if line.strip().startswith("-")]
                 if feature_lines:
                     variations.append(feature_lines)
             result["features"] = variations[:3]
@@ -268,18 +288,56 @@ def fetch_ai_content(request):
             Existing Description (if any): {product_obj.long_description}
             """
             prompt = f"""
-            Generate exactly 3 product descriptions for the product below.
-            Each variation should:
-            - Be 2 paragraphs
-            - Have 80–100 words total
-            - Focus on product benefits, usage, features
-            - Be clear, professional, and marketing-friendly (US tone)
-            - Avoid generic fluff or repeated points
-            Clearly label each variation like:
-            Variation 1:
-            [Paragraph 1]
-            [Paragraph 2]
+            Generate exactly 3 product description variations for the product below.
+
+            Product Information:
             {prompt_info}
+
+            Requirements:
+
+            - Write as an experienced industrial product catalog editor.
+            - Use a natural, factual, human writing style.
+            - Sound like a Grainger, Würth, MSC, or Fastenal product listing.
+            - Each variation must contain exactly 2 paragraphs.
+            - Total length should be between 80 and 120 words.
+            - Paragraph 1 should explain what the product is and its primary application.
+            - Paragraph 2 should describe its important features, materials, compatibility, or typical use.
+            - Write in active voice.
+            - Vary sentence openings and sentence lengths naturally.
+            - Only mention information that is supported by the product information.
+            - If a specification is unknown, do not invent it.
+
+            Avoid:
+            - Marketing buzzwords.
+            - Sales language.
+            - Generic introductions.
+            - AI-style phrases such as:
+            "Introducing..."
+            "Meet..."
+            "Unlock..."
+            "Whether you're..."
+            "Designed for professionals..."
+            "Perfect for..."
+            "High-quality..."
+            "Reliable solution..."
+            "Take your projects to the next level..."
+
+            Output format exactly:
+
+            Variation 1:
+            <paragraph 1>
+
+            <paragraph 2>
+
+            Variation 2:
+            <paragraph 1>
+
+            <paragraph 2>
+
+            Variation 3:
+            <paragraph 1>
+
+            <paragraph 2>
             """
             response_text = chatgpt_response(prompt)
             blocks = response_text.strip().split("Variation")
@@ -291,7 +349,8 @@ def fetch_ai_content(request):
                     descriptions.append("\n\n".join(paragraph_texts[:2]))
             result["description"] = descriptions[:3]
         return JsonResponse(result, safe=False)
-    
+
+
 @csrf_exempt
 def update_product_content(request):
     if request.method == "POST":
@@ -299,13 +358,13 @@ def update_product_content(request):
         product_id = data.get("product_id")
         selected_content = data.get("content")
         product_obj = product.objects.get(id=product_id)
-        product_obj.description = selected_content  # or product.features based on selection
+        # or product.features based on selection
+        product_obj.description = selected_content
         product_obj.save()
         return JsonResponse({"status": "success"})
-    
+
 
 @csrf_exempt
-
 def productList(request):
     match = {}
     pipeline = []
@@ -316,15 +375,18 @@ def productList(request):
     search_query = search_query.strip()
     try:
         spell = SpellChecker()
-        search_query = ' '.join([spell.correction(word) for word in search_query.split()])
+        search_query = ' '.join([spell.correction(word)
+                                for word in search_query.split()])
     except:
         pass
     if category_id is not None and category_id != "":
         match["category_id"] = ObjectId(category_id)
     if attributes and isinstance(attributes, dict):
         for attribute_name, attribute_values in attributes.items():
-            if attribute_values and isinstance(attribute_values, list):  # Ensure attribute_values is a list
-                match[f"attributes.{attribute_name}"] = {"$in": attribute_values}  # Use $in for list matching
+            # Ensure attribute_values is a list
+            if attribute_values and isinstance(attribute_values, list):
+                match[f"attributes.{attribute_name}"] = {
+                    "$in": attribute_values}  # Use $in for list matching
     pipeline.append({
         "$match": match
     })
@@ -344,8 +406,10 @@ def productList(request):
             "$match": {
                 "$or": [
                     {"brand_name": {"$regex": search_query, "$options": "i"}},
-                    {"product_category_ins.name": {"$regex": search_query, "$options": "i"}},
-                    {"sku_number_product_code_item_number": {"$regex": search_query, "$options": "i"}},
+                    {"product_category_ins.name": {
+                        "$regex": search_query, "$options": "i"}},
+                    {"sku_number_product_code_item_number": {
+                        "$regex": search_query, "$options": "i"}},
                     {"mpn": {"$regex": search_query, "$options": "i"}},
                     {"model": {"$regex": search_query, "$options": "i"}},
                     {"upc_ean": {"$regex": search_query, "$options": "i"}},
@@ -356,28 +420,34 @@ def productList(request):
                                 {
                                     "$size": {
                                         "$filter": {
-                                            "input": { "$objectToArray": "$attributes" },
+                                            "input": {"$objectToArray": "$attributes"},
                                             "cond": {
                                                 "$or": [
                                                     # Check if key matches the search query
                                                     {
                                                         "$and": [
-                                                            { "$eq": [{ "$type": "$$this.k" }, "string"] },
-                                                            { "$regexMatch": { "input": "$$this.k", "regex": search_query, "options": "i" } }
+                                                            {"$eq": [
+                                                                {"$type": "$$this.k"}, "string"]},
+                                                            {"$regexMatch": {
+                                                                "input": "$$this.k", "regex": search_query, "options": "i"}}
                                                         ]
                                                     },
                                                     # Check if string values match the search query
                                                     {
                                                         "$and": [
-                                                            { "$eq": [{ "$type": "$$this.v" }, "string"] },
-                                                            { "$regexMatch": { "input": "$$this.v", "regex": search_query, "options": "i" } }
+                                                            {"$eq": [
+                                                                {"$type": "$$this.v"}, "string"]},
+                                                            {"$regexMatch": {
+                                                                "input": "$$this.v", "regex": search_query, "options": "i"}}
                                                         ]
                                                     },
                                                     # Check if numeric values match the search query (by converting to string)
                                                     {
                                                         "$and": [
-                                                            { "$in": [{ "$type": "$$this.v" }, ["int", "long", "double", "decimal"]] },
-                                                            { "$regexMatch": { "input": { "$toString": "$$this.v" }, "regex": search_query, "options": "i" } }
+                                                            {"$in": [{"$type": "$$this.v"}, [
+                                                                "int", "long", "double", "decimal"]]},
+                                                            {"$regexMatch": {
+                                                                "input": {"$toString": "$$this.v"}, "regex": search_query, "options": "i"}}
                                                         ]
                                                     }
                                                 ]
@@ -390,7 +460,7 @@ def productList(request):
                         }
                     },
                     {"long_description": {"$regex": search_query, "$options": "i"}},
-                    {"features": {"$regex": search_query, "$options": "i"}},                    
+                    {"features": {"$regex": search_query, "$options": "i"}},
                 ]
             }
         },
@@ -414,7 +484,6 @@ def productList(request):
     return data
 
 
-
 def convertToTrue(data):
     updated_list = list()
     for ins in data:
@@ -433,8 +502,9 @@ def fetch_categories(request):
     API to fetch all unique categories with their product count.
     Optional search query: /fetch_categories/?q=searchterm
     """
-    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
-    
+    search_query = request.GET.get(
+        'q', '').strip() if request.GET.get('q') else ''
+
     pipeline = [
         {
             "$lookup": {
@@ -467,7 +537,7 @@ def fetch_categories(request):
         },
         {"$sort": {"name": 1}}  # Sort alphabetically
     ]
-    
+
     categories = list(product.objects.aggregate(*pipeline))
     return Response({"categories": categories})
 
@@ -479,8 +549,9 @@ def fetch_brands(request):
     API to fetch all unique brand names with their product count.
     Optional search query: /fetch_brands/?q=searchterm
     """
-    search_query = request.GET.get('q', '').strip() if request.GET.get('q') else ''
-    
+    search_query = request.GET.get(
+        'q', '').strip() if request.GET.get('q') else ''
+
     pipeline = [
         {
             "$match": {
@@ -505,9 +576,10 @@ def fetch_brands(request):
             "$sort": {"name": 1}  # Sort alphabetically by brand name
         }
     ]
-    
+
     brands = list(product.objects.aggregate(*pipeline))
     return Response({"brands": brands})
+
 
 @csrf_exempt
 @api_view(['GET'])
@@ -550,7 +622,6 @@ def fetch_price_range(request):
     return Response(price_range[0] if price_range else {"min_price": 0, "max_price": 0})
 
 
-
 @csrf_exempt
 @api_view(['GET'])
 def brand_search(request):
@@ -581,6 +652,7 @@ def brand_search(request):
     ]
     brands = list(product.objects.aggregate(*pipeline))
     return Response({"brands": brands})
+
 
 @csrf_exempt
 @api_view(['GET'])
@@ -623,33 +695,41 @@ def category_search(request):
     return Response({"categories": categories})
 
 
-import re
 def strip_html_tags(text):
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
+
+
 @csrf_exempt
 def productDetail(request, product_id):
     product_list = productDetails(product_id)
-    product_list['ai_generated_title'] = convertToTrue(product_list['ai_generated_title'])
-    product_list['ai_generated_description'] = convertToTrue(product_list['ai_generated_description'])
-    product_list['ai_generated_features'] = convertToTrue(product_list['ai_generated_features'])
+    product_list['ai_generated_title'] = convertToTrue(
+        product_list['ai_generated_title'])
+    product_list['ai_generated_description'] = convertToTrue(
+        product_list['ai_generated_description'])
+    product_list['ai_generated_features'] = convertToTrue(
+        product_list['ai_generated_features'])
 
     # Remove HTML tags from features
     if 'features' in product_list and isinstance(product_list['features'], list):
-        product_list['features'] = [strip_html_tags(f) for f in product_list['features']]
+        product_list['features'] = [strip_html_tags(
+            f) for f in product_list['features']]
 
     data = dict()
     data['product'] = product_list
     return data
-def normalize_query(query:str)-> str:
-    query=query.strip().lower()
+
+
+def normalize_query(query: str) -> str:
+    query = query.strip().lower()
     query = re.sub(r'\s+', ' ', query)
     query = re.sub(r'[?!.]+$', '', query)
     return query
-    
+
+
 @csrf_exempt
 def chatbotView(request):
-    data = dict() 
+    data = dict()
     try:
         json_request = JSONParser().parse(request)
         user_query = json_request['message']
@@ -657,13 +737,13 @@ def chatbotView(request):
         if not user_query and not product_id:
             data['response'] = "Both message and product_id are required"
             return data
-        user_query=escape(user_query)
+        user_query = escape(user_query)
         product = productDetails(product_id)
         if not product:
             data['response'] = 'Product not found'
             return data
         product_category_id = product.get('category_id')
-        
+
         if isinstance(product_category_id, str):
             try:
                 product_category_id = ObjectId(product_category_id)
@@ -671,44 +751,48 @@ def chatbotView(request):
                 data['response'] = "Invalid category ID format"
                 return data
         normalized_query = user_query.strip()
-        existing_answer = product_questions.objects(question=normalized_query).first()
-        # print(existing_answer.to_mongo()) 
-        
+        existing_answer = product_questions.objects(
+            question=normalized_query).first()
+        # print(existing_answer.to_mongo())
+
         # CORRECT: Simple check and access for StringField
-        if existing_answer and (existing_answer,'answer',None):
+        if existing_answer and (existing_answer, 'answer', None):
             if existing_answer.answer.strip():
                 data['response'] = existing_answer.answer
                 return data
-            
+
         response_text = get_product_assistant_response(user_query, product_id)
-        product_questions(question=user_query,answer=response_text,category_id=product_category_id,product_id=ObjectId(product_id)).save()
+        product_questions(question=user_query, answer=response_text,
+                          category_id=product_category_id, product_id=ObjectId(product_id)).save()
         data['response'] = response_text
         return data
     except Exception as e:
         data['response'] = f"An unexpected error occurred: {str(e)}"
         return data
-    
-def fetchProductQuestions(request,product_id):
+
+
+def fetchProductQuestions(request, product_id):
     product_obj = product.objects.get(id=product_id)
     pipeline = [
         {
-            "$match" : {
-                "category_id" : product_obj.category_id.id
+            "$match": {
+                "category_id": product_obj.category_id.id
             }
         },
         {
-            "$project" : {
-                "_id" : 0,
-                "id" : {"$toString" : "$_id"},
-                "question" : 1
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "question": 1
             }
         },
         # {"$limit" : 6}
     ]
-    product_questions_list = list(product_questions.objects.aggregate(*(pipeline)))
+    product_questions_list = list(
+        product_questions.objects.aggregate(*(pipeline)))
     return product_questions_list
 
-import re
+
 @csrf_exempt
 def fetchAiContent(request):
     result = {}
@@ -724,11 +808,31 @@ def fetchAiContent(request):
         product_name = product_obj.product_name
         sku = product_obj.sku_number_product_code_item_number
         mpn = getattr(product_obj, 'mpn', '')
+
         def chatgpt_response(prompt):
             response = client.chat.completions.create(
                 model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """
+                        You are a senior ecommerce product content editor.
+
+                        Write naturally and factually, like an experienced catalog editor at Grainger, Würth, Fastenal, or MSC.
+
+                        Never sound like AI-generated marketing copy.
+
+                        Avoid generic promotional phrases, exaggerated claims, and repetitive sentence structures.
+
+                        Only include information supported by the available product information.
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
             )
             return response.choices[0].message.content
         if fetch_title:
@@ -739,30 +843,58 @@ def fetchAiContent(request):
             MPN: {mpn}
             """
             prompt = f"""
-            Generate Product Content Based on Specific Sources and instruction
-            Product:
+            Generate exactly 3 product title variations.
+
+            Product Information:
             {prompt_info}
-            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
-            Product Content Requirements
-            Product Title:
-            Follow this structure:
-            [Brand Name] [Model Number] [Product Type] [2-3 Key Specifications] - [Primary Benefit]
-            Use Title Case (Capitalize Each Major Word)
-            Do not use punctuation marks (commas, hyphens, colons, etc.)
-            Avoid all caps
-            Include the primary keyword near the beginning
-            Limit to 120 characters maximum
-            End with a clear, concise benefit or distinctive feature when appropriate (optional)
-            Match the style like this:
-                Makita 6407 3/8 Inch Drill 4.9 Amp Variable Speed Quiet Operation
-                Makita 6407 3/8 Inch Corded Drill 4.9 Amp 2500 Rpm Ergonomic Design
-                Makita 6407 3/8 Inch Variable Speed Drill 4.9 Amp Reversible Motor
-            Instructions for Content Creation
-            Provide 3 concise variations of the chosen content type (product title).
-            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
-            Supplement missing details using other listed sources while maintaining consistency across all content.
-            Provide three concise variations of the chosen content type (product title).
-            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
+
+            You are an experienced ecommerce catalog editor writing product titles for industrial distributors such as Würth, Grainger, MSC Direct, and Fastenal.
+
+            Requirements:
+
+            - Write titles that sound like they were written by a human catalog specialist.
+            - Use factual, search-friendly wording.
+            - Follow this format:
+
+            Brand + Model + Product Type + Important Specifications
+
+            - Include the brand when available.
+            - Include the model or MPN when available.
+            - Include important specifications only if they are known.
+            - Keep each title under 120 characters.
+            - Use Title Case.
+            - Make each variation different by changing word order, not by adding marketing language.
+
+            Do NOT use:
+
+            - Premium
+            - Best
+            - Superior
+            - High Quality
+            - Reliable
+            - Durable
+            - Professional Grade
+            - Industry Leading
+            - Perfect For
+            - Innovative
+            - Ultimate
+
+            Do NOT:
+            - invent specifications
+            - invent dimensions
+            - invent performance values
+            - add promotional claims
+            - end the title with marketing benefits
+
+            Good examples:
+
+            Makita 6407 3/8 Inch Variable Speed Drill 4.9 Amp
+
+            Milwaukee M18 Fuel Hammer Drill 1/2 Inch Cordless
+
+            Metabo TKHS315C Portable Table Saw 240V
+
+            Return only the three titles, one per line.
             """
             response_text = chatgpt_response(prompt)
             print("title..............................", response_text)
@@ -771,8 +903,16 @@ def fetchAiContent(request):
                 for line in response_text.strip().split("\n")
                 if line.strip()
             ]
-            variations = [line for line in lines if len(line.split()) > 2][:3]
-            result["title"] = [{"value": t, "checked": False} for t in variations]
+            variations = [
+                line for line in lines
+                if (
+                    len(line.split()) > 2
+                    and "variation" not in line.lower()
+                    and "title" not in line.lower()
+                )
+            ][:3]
+            result["title"] = [{"value": t, "checked": False}
+                               for t in variations]
             update_obj["ai_generated_title"] = result["title"]
         if fetch_features:
             prompt_info = f"""
@@ -783,23 +923,64 @@ def fetchAiContent(request):
             Existing Feature Text (if any): {product_obj.features}
             """
             prompt = f"""
-            Generate Product Content Based on Specific Sources and instruction
-            Product:
+            Generate exactly 3 feature list variations.
+
+            Product Information:
             {prompt_info}
-            Objective: Create product descriptions and features using data primarily sourced from Würth Baer Supply Company (www.baersupply.com) and other specified websites (Brand website – Manufacturer's official site, Grainger.com, Homedepot.com, MSCdirect.com,  Globalindustrial.com). Ensure all attributes are formatted appropriately and align with the structure provided below.
-            Product Content Requirements
-            Features:
-            List 8-10 key product features in bullet point format:
-            Lead with the benefit, then explain the feature.
-            Begin each bullet with an action verb or highlight a specific metric.
-            Include compatibility, dimensions, materials, and performance metrics when relevant.
-            Limit each bullet to 1-2 concise sentences.
-            Instructions for Content Creation
-            Provide 3 concise variations of the chosen content type (features).
-            Collect detailed product specifications, dimensions, materials, and benefits from Würth Baer Supply Company first.
-            Supplement missing details using other listed sources while maintaining consistency across all content.
-            Provide three concise variations of the chosen content type (features).
-            Ensure each variation is clear, human-friendly, and formatted as per guidelines.
+
+            You are an experienced industrial product catalog editor writing for distributors such as Würth, Grainger, MSC Direct, Fastenal, and Global Industrial.
+
+            Requirements:
+
+            - Create exactly 3 variations.
+            - Each variation must contain 6-8 bullet points.
+            - Each bullet should describe one factual product characteristic.
+            - Prioritize:
+            - Function
+            - Material
+            - Construction
+            - Compatibility
+            - Dimensions (only if known)
+            - Performance (only if known)
+            - Typical applications
+            - Keep each bullet to one concise sentence.
+            - Rewrite existing features naturally when appropriate.
+            - If a specification is unknown, do not invent it.
+
+            Avoid:
+
+            - Marketing language.
+            - Promotional claims.
+            - Generic statements.
+            - Repeating the same information using different wording.
+            - AI-style phrases such as:
+            - Designed to...
+            - Perfect for...
+            - Ideal for...
+            - Ensures...
+            - Delivers...
+            - Provides superior...
+            - High-quality...
+            - Reliable solution...
+            - Experience...
+            - Enjoy...
+            - Unlock...
+
+            Write in the style of a professional industrial product catalog rather than an advertisement.
+
+            Output format exactly:
+
+            Variation 1:
+            - ...
+            - ...
+
+            Variation 2:
+            - ...
+            - ...
+
+            Variation 3:
+            - ...
+            - ...
             """
             response_text = chatgpt_response(prompt)
             print("variations_raw Features............................", response_text)
@@ -851,10 +1032,12 @@ def fetchAiContent(request):
             response_text = chatgpt_response(prompt)
             print("blocks description............................", response_text)
             # Match blocks like 'Variation 1:\n<text>\n\n<text>'
-            matches = re.findall(r"Variation\s+\d+:\s*(.*?)(?=\nVariation|\Z)", response_text, re.DOTALL)
+            matches = re.findall(
+                r"Variation\s+\d+:\s*(.*?)(?=\nVariation|\Z)", response_text, re.DOTALL)
             descriptions = []
             for match in matches:
-                paragraphs = [p.strip() for p in match.strip().split("\n\n") if p.strip()]
+                paragraphs = [p.strip()
+                              for p in match.strip().split("\n\n") if p.strip()]
                 if len(paragraphs) >= 2:
                     descriptions.append("\n\n".join(paragraphs[:2]))
                 else:
@@ -864,9 +1047,12 @@ def fetchAiContent(request):
             ]
             update_obj["ai_generated_description"] = result["description"]
         if update_obj:
-            print("update_obj..........",update_obj)
-            DatabaseModel.update_documents(product.objects, {"id": product_id}, update_obj)
+            print("update_obj..........", update_obj)
+            DatabaseModel.update_documents(
+                product.objects, {"id": product_id}, update_obj)
     return result
+
+
 @csrf_exempt
 def updateProductContent(request):
     if request.method == "POST":
@@ -904,38 +1090,48 @@ def updateProductContent(request):
             pass
         product_obj.save()
         return True
+
+
 def fetchPromptList(request):
-    pipeline = [         
+    pipeline = [
         {
-            "$project" : {
-                "_id" : 0,
-                "id" : {"$toString" : "$_id"},
-                "name" : 1,
+            "$project": {
+                "_id": 0,
+                "id": {"$toString": "$_id"},
+                "name": 1,
             }
         }
     ]
     prompt_list = list(prompt_type.objects.aggregate(*(pipeline)))
-    return prompt_list 
+    return prompt_list
+
+
 @csrf_exempt
 def regenerateAiContents(request):
     if request.method == "POST":
         update_obj = dict()
         data = json.loads(request.body)
         product_id = data.get("product_id")
-        selected_option = data.get("option")  # e.g., "Improve writing", "Make longer", etc.
-        regenerate_title = data.get("title")  # This is the selected title to regenerate (optional)
-        regenerate_features = data.get("features")  # List of selected features (optional)
-        regenerate_description = data.get("description")  # This is the selected description (optional)
+        # e.g., "Improve writing", "Make longer", etc.
+        selected_option = data.get("option")
+        # This is the selected title to regenerate (optional)
+        regenerate_title = data.get("title")
+        # List of selected features (optional)
+        regenerate_features = data.get("features")
+        # This is the selected description (optional)
+        regenerate_description = data.get("description")
         result = {}
+
         def ask_chatgpt(prompt):
             try:
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",  # or "gpt-3.5-turbo"
                     messages=[
-                        {"role": "system", "content": "You are a helpful product content writer."},
+                        {"role": "system",
+                            "content": "You are a helpful product content writer."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.7,
+                    temperature=0.3,
                     max_tokens=500
                 )
                 return response.choices[0].message.content.strip()
@@ -953,13 +1149,14 @@ def regenerateAiContents(request):
                     ✍️ Updated Title:
                     """
                     titles = ask_chatgpt(prompt)
-                    ins['value'] =  titles
+                    ins['value'] = titles
             result["title"] = regenerate_title
             update_obj['ai_generated_title'] = result["title"]
         if regenerate_features:
             for ins in regenerate_features:
                 if ins['checked'] == True:
-                    original_features = "\n".join(f"- {f}" for f in ins['value'])
+                    original_features = "\n".join(
+                        f"- {f}" for f in ins['value'])
                     prompt = f"""
                     You are an expert at rewriting ecommerce product features.
                     Please {selected_option.lower()} the following list of product features. Return only **one revised version** as a clean bullet-point list. Each bullet should be on its own line. Do not include any extra notes, explanations, or markdown formatting.
@@ -992,13 +1189,11 @@ def regenerateAiContents(request):
             result['description'] = regenerate_description
             update_obj['ai_generated_description'] = result["description"]
         if update_obj != {}:
-            DatabaseModel.update_documents(product.objects,{"id" : product_id},update_obj)
+            DatabaseModel.update_documents(
+                product.objects, {"id": product_id}, update_obj)
         return result
-from guidedProductAssistant.models import product_category,filter
-from product_assistant.crud import DatabaseModel
-import threading
-from bson import ObjectId
-from math import isnan
+
+
 def process_category(category, category_idx):
     print(f"Processing category {category_idx}: {category.name}")
     # Fetch all products associated with the category
@@ -1010,7 +1205,8 @@ def process_category(category, category_idx):
         # Iterate through the attributes of the product
         for attribute_name, attribute_value in product_obj.attributes.items():
             # Check if a filter with the same name and category_id already exists
-            existing_filter = DatabaseModel.get_document(filter.objects, {"category_id": category.id, "name": attribute_name})
+            existing_filter = DatabaseModel.get_document(
+                filter.objects, {"category_id": category.id, "name": attribute_name})
             if existing_filter:
                 # If the filter exists, update the config['options'] field
                 if 'options' not in existing_filter.config:
@@ -1027,6 +1223,8 @@ def process_category(category, category_idx):
                     config={'options': [attribute_value]}
                 )
                 new_filter.save()
+
+
 def script(request):
     # Fetch all categories where end_level is True
     end_level_categories = product_category.objects(end_level=True)
@@ -1034,13 +1232,16 @@ def script(request):
     category_idx = 0
     for category in end_level_categories:
         category_idx += 1
-        thread = threading.Thread(target=process_category, args=(category, category_idx))
+        thread = threading.Thread(
+            target=process_category, args=(category, category_idx))
         threads.append(thread)
         thread.start()
     # Wait for all threads to complete
     for thread in threads:
         thread.join()
     return True
+
+
 def remove_nan_from_filters():
     # Fetch all filter documents
     filters = filter.objects()
@@ -1056,6 +1257,8 @@ def remove_nan_from_filters():
                 filter_obj.config['options'] = cleaned_options
                 filter_obj.save()
     return True
+
+
 @csrf_exempt
 def updategeneratedContent(request):
     data = dict()
