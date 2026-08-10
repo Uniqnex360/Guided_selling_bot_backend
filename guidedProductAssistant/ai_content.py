@@ -88,10 +88,12 @@ TITLE_PROMPT = """
             - Create one SEO and GEO optimized product title.
             - Sound natural and human-written.
             - Include the product name naturally.
-            - Include the brand and model when available.
             - Keep under 120 characters.
             - Use Title Case.
             - Do not invent specifications.
+            - Include the brand when available.
+            - Do NOT include the SKU, MPN, UPC/EAN, model number, or any internal product codes.
+            - Do NOT add prices, quantities, or marketing words like "best", "cheap", "discount".
             - Do not use promotional language.
 
             Return only the title.
@@ -173,6 +175,8 @@ REWRITE_TITLE_PROMPT = """
                         - Improve SEO and GEO.
                         - Preserve technical accuracy.
                         - Do not invent specifications.
+                        - Do NOT include the SKU, MPN, UPC/EAN, model number, or any internal product codes.
+                        - Do NOT add prices, quantities, or marketing words like "best", "cheap", "discount".
                         - Avoid AI-style wording.
                         - Avoid promotional language.
 
