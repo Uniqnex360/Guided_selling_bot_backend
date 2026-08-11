@@ -1,7 +1,7 @@
 from django.urls import path
 from guidedProductAssistant.views import (
     product_list, product_detail, chatbot_view, update_product_content,
-    productList, productDetail, chatbotView, fetchAiContent, fetchProductQuestions,
+    productList, productDetail, chatbotView, fetchAiContent, fetchProductQuestions,fetchAiHistory,
     updateProductContent, fetchPromptList, regenerateAiContents, script, updategeneratedContent,
     register, login, brand_search, category_search,fetch_brands,fetch_price_range,fetch_categories,import_products_from_excel,delete_product
 )
@@ -15,6 +15,7 @@ urlpatterns = [
     path("update_product_content/", update_product_content, name="update_product_content"),
     path("productList/", productList, name="productList"),
     path("productDetail/<product_id>/", productDetail, name="productDetail"),
+    path("fetchAiHistory/<str:product_id>/", fetchAiHistory, name="fetchAiHistory"),
     path("chatbotView/", chatbotView, name="chatbotView"),
     path("fetchAiContent/", fetchAiContent, name="fetchAiContent"),
     path("fetchProductQuestions/<product_id>/", fetchProductQuestions, name="fetchProductQuestions"),

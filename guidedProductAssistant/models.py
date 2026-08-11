@@ -100,6 +100,16 @@ class product(Document):
     ai_generated_title = fields.ListField(fields.DictField())
     ai_generated_description = fields.ListField(fields.DictField())
     ai_generated_features = fields.ListField(fields.DictField())
+    ai_title_generate_count=fields.IntField(default=0)
+    ai_description_generate_count=fields.IntField(default=0)
+    ai_features_generate_count=fields.IntField(default=0)
+    ai_title_history=fields.ListField(fields.DictField())
+    ai_features_history=fields.ListField(fields.DictField())
+    ai_description_history=fields.ListField(fields.DictField())
+    ai_title_rewrite_count = fields.IntField(default=0)
+    ai_features_rewrite_count = fields.IntField(default=0)
+    ai_description_rewrite_count = fields.IntField(default=0)
+    
 
 
 def save_products_from_excel(file_path):
