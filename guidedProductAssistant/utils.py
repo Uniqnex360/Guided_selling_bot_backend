@@ -67,6 +67,10 @@ def productDetails(product_id):
             "ai_generated_title" : {"$ifNull": ["$ai_generated_title", []]},
             "ai_generated_description" : {"$ifNull": ["$ai_generated_description", []]},
             "ai_generated_features" : {"$ifNull": ["$ai_generated_features", []]},
+             "ai_title_rewrite_count" : {"$ifNull": ["$ai_title_rewrite_count", 0]},
+            "ai_features_rewrite_count" : {"$ifNull": ["$ai_features_rewrite_count", 0]},
+            "ai_description_rewrite_count" : {"$ifNull": ["$ai_description_rewrite_count", 0]},
+            
            }
         }
     ]

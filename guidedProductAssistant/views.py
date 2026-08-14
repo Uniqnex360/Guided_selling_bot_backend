@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from mongoengine.errors import NotUniqueError
 from datetime import datetime, timedelta
 import jwt
+import traceback
 from django.contrib.auth.hashers import make_password, check_password
 from guidedProductAssistant.models import User
 from django.shortcuts import render
@@ -51,8 +52,6 @@ def handle_exceptions(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            if args and hasattr(args[0], 'headers'):
-                return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             return {'error': str(e)}
     return _wrapped
 def jwt_required(view_func):
@@ -87,7 +86,14 @@ def import_products_from_excel(request):
         save_products_from_excel(tmp_path)
         return Response({"status": "success", "message": "Products imported successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
+        traceback.print_exc()
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    finally:
+        try:
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
 @handle_exceptions
 @csrf_exempt
 @api_view(['DELETE'])
@@ -191,32 +197,170 @@ def update_product_content(request):
         product_obj.description = selected_content
         product_obj.save()
         return JsonResponse({"status": "success"})
+    
+# @handle_exceptions
+# @csrf_exempt
+# def productList(request):
+#     match = {}
+#     pipeline = []
+#     json_request = JSONParser().parse(request)
+#     search_query = json_request.get("search_query")
+#     category_id = json_request.get("category_id")
+#     category_ids = json_request.get("category_ids", [])
+#     brands = json_request.get("brands", [])
+#     attributes = json_request.get("attributes", {})
+#     search_query = search_query.strip()
+#     if category_ids and isinstance(category_ids, list):
+#         valid_ids = [ObjectId(cid) for cid in category_ids if cid]
+#         if valid_ids:
+#             match["category_id"] = {"$in": valid_ids}
+#     elif category_id and category_id != "":
+#         match["category_id"] = ObjectId(category_id)
+
+#     # 2. Brand Filter (Handles multiple selected brands)
+#     if brands and isinstance(brands, list) and len(brands) > 0:
+#         match["brand_name"] = {"$in": brands}
+
+#     # 3. Attribute Filters
+#     if attributes and isinstance(attributes, dict):
+#         for attribute_name, attribute_values in attributes.items():
+#             if attribute_values and isinstance(attribute_values, list):
+#                 match[f"attributes.{attribute_name}"] = {"$in": attribute_values}
+
+#     if match:
+#         pipeline.append({"$match": match})
+#     pipeline.extend([
+#         {
+#             "$lookup": {
+#                 "from": "product_category",
+#                 "localField": "category_id",
+#                 "foreignField": "_id",
+#                 "as": "product_category_ins"
+#             }
+#         },
+#         {
+#             "$unwind": "$product_category_ins"
+#         },
+#         {
+#             "$match": {
+#                 "$or": [
+#                     {"brand_name": {"$regex": search_query, "$options": "i"}},
+#                     {"product_category_ins.name": {
+#                         "$regex": search_query, "$options": "i"}},
+#                     {"sku_number_product_code_item_number": {
+#                         "$regex": search_query, "$options": "i"}},
+#                     {"mpn": {"$regex": search_query, "$options": "i"}},
+#                     {"model": {"$regex": search_query, "$options": "i"}},
+#                     {"upc_ean": {"$regex": search_query, "$options": "i"}},
+#                     {"product_name": {"$regex": f'^{search_query}$', "$options": "i"}},
+#                     {
+#                         "$expr": {
+#                             "$gt": [
+#                                 {
+#                                     "$size": {
+#                                         "$filter": {
+#                                             "input": {"$objectToArray": "$attributes"},
+#                                             "cond": {
+#                                                 "$or": [
+#                                                     {
+#                                                         "$and": [
+#                                                             {"$eq": [
+#                                                                 {"$type": "$$this.k"}, "string"]},
+#                                                             {"$regexMatch": {
+#                                                                 "input": "$$this.k", "regex": search_query, "options": "i"}}
+#                                                         ]
+#                                                     },
+#                                                     {
+#                                                         "$and": [
+#                                                             {"$eq": [
+#                                                                 {"$type": "$$this.v"}, "string"]},
+#                                                             {"$regexMatch": {
+#                                                                 "input": "$$this.v", "regex": search_query, "options": "i"}}
+#                                                         ]
+#                                                     },
+#                                                     {
+#                                                         "$and": [
+#                                                             {"$in": [{"$type": "$$this.v"}, [
+#                                                                 "int", "long", "double", "decimal"]]},
+#                                                             {"$regexMatch": {
+#                                                                 "input": {"$toString": "$$this.v"}, "regex": search_query, "options": "i"}}
+#                                                         ]
+#                                                     }
+#                                                 ]
+#                                             }
+#                                         }
+#                                     }
+#                                 },
+#                                 0
+#                             ]
+#                         }
+#                     },
+#                     {"long_description": {"$regex": search_query, "$options": "i"}},
+#                     {"features": {"$regex": search_query, "$options": "i"}},
+#                 ]
+#             }
+#         },
+#          {"$sort": {"_id": -1}},   
+#         {
+#             "$project": {
+#                 "_id": 0,
+#                 "id": {"$toString": "$_id"},
+#                 "image_url": {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
+#                 "sku": {"$ifNull": ["$sku_number_product_code_item_number", "N/A"]},
+#                 "name": {"$ifNull": ["$product_name", "N/A"]},
+#                 "category": "$product_category_ins.name",
+#                 "price": {"$ifNull": [{"$round": ["$list_price", 2]}, 0.0]},
+#                 "mpn": {"$ifNull": ["$mpn", "N/A"]},
+#                 "brand_name": {"$ifNull": ["$brand_name", "N/A"]},
+#                 "ai_used": {
+#     "$or": [
+#         {"$gt": [{"$size": {"$ifNull": ["$ai_generated_title", []]}}, 0]},
+#         {"$gt": [{"$size": {"$ifNull": ["$ai_generated_description", []]}}, 0]},
+#         {"$gt": [{"$size": {"$ifNull": ["$ai_generated_features", []]}}, 0]},
+#     ]
+# },
+#             }
+#         },
+#     ])
+#     product_list = list(product.objects.aggregate(*(pipeline)))
+#     data = dict()
+#     data['products'] = product_list
+#     return data
 @handle_exceptions
 @csrf_exempt
 def productList(request):
     match = {}
     pipeline = []
     json_request = JSONParser().parse(request)
-    search_query = json_request.get("search_query")
+    
+    search_query = json_request.get("search_query", "").strip()
     category_id = json_request.get("category_id")
+    category_ids = json_request.get("category_ids", [])
+    brands = json_request.get("brands", [])
     attributes = json_request.get("attributes", {})
-    search_query = search_query.strip()
-    try:
-        spell = SpellChecker()
-        search_query = ' '.join([spell.correction(word)
-                                for word in search_query.split()])
-    except:
-        pass
-    if category_id is not None and category_id != "":
+
+    # 1. Category Filter (Supports both single ID and array of IDs)
+    if category_ids and isinstance(category_ids, list):
+        valid_ids = [ObjectId(cid) for cid in category_ids if cid]
+        if valid_ids:
+            match["category_id"] = {"$in": valid_ids}
+    elif category_id and category_id != "":
         match["category_id"] = ObjectId(category_id)
+
+    # 2. Brand Filter (Handles multiple selected brands)
+    if brands and isinstance(brands, list) and len(brands) > 0:
+        match["brand_name"] = {"$in": brands}
+
+    # 3. Attribute Filters
     if attributes and isinstance(attributes, dict):
         for attribute_name, attribute_values in attributes.items():
             if attribute_values and isinstance(attribute_values, list):
-                match[f"attributes.{attribute_name}"] = {
-                    "$in": attribute_values}
-    pipeline.append({
-        "$match": match
-    })
+                match[f"attributes.{attribute_name}"] = {"$in": attribute_values}
+
+    if match:
+        pipeline.append({"$match": match})
+
+    # Always Lookup Categories
     pipeline.extend([
         {
             "$lookup": {
@@ -226,21 +370,21 @@ def productList(request):
                 "as": "product_category_ins"
             }
         },
-        {
-            "$unwind": "$product_category_ins"
-        },
-        {
+        {"$unwind": "$product_category_ins"}
+    ])
+
+    # 4. Search Filter (Only added if user typed a search query)
+    if search_query:
+        pipeline.append({
             "$match": {
                 "$or": [
                     {"brand_name": {"$regex": search_query, "$options": "i"}},
-                    {"product_category_ins.name": {
-                        "$regex": search_query, "$options": "i"}},
-                    {"sku_number_product_code_item_number": {
-                        "$regex": search_query, "$options": "i"}},
+                    {"product_category_ins.name": {"$regex": search_query, "$options": "i"}},
+                    {"sku_number_product_code_item_number": {"$regex": search_query, "$options": "i"}},
                     {"mpn": {"$regex": search_query, "$options": "i"}},
                     {"model": {"$regex": search_query, "$options": "i"}},
                     {"upc_ean": {"$regex": search_query, "$options": "i"}},
-                    {"product_name": {"$regex": f'^{search_query}$', "$options": "i"}},
+                    {"product_name": {"$regex": search_query, "$options": "i"}}, # Fixed substring match
                     {
                         "$expr": {
                             "$gt": [
@@ -252,26 +396,20 @@ def productList(request):
                                                 "$or": [
                                                     {
                                                         "$and": [
-                                                            {"$eq": [
-                                                                {"$type": "$$this.k"}, "string"]},
-                                                            {"$regexMatch": {
-                                                                "input": "$$this.k", "regex": search_query, "options": "i"}}
+                                                            {"$eq": [{"$type": "$$this.k"}, "string"]},
+                                                            {"$regexMatch": {"input": "$$this.k", "regex": search_query, "options": "i"}}
                                                         ]
                                                     },
                                                     {
                                                         "$and": [
-                                                            {"$eq": [
-                                                                {"$type": "$$this.v"}, "string"]},
-                                                            {"$regexMatch": {
-                                                                "input": "$$this.v", "regex": search_query, "options": "i"}}
+                                                            {"$eq": [{"$type": "$$this.v"}, "string"]},
+                                                            {"$regexMatch": {"input": "$$this.v", "regex": search_query, "options": "i"}}
                                                         ]
                                                     },
                                                     {
                                                         "$and": [
-                                                            {"$in": [{"$type": "$$this.v"}, [
-                                                                "int", "long", "double", "decimal"]]},
-                                                            {"$regexMatch": {
-                                                                "input": {"$toString": "$$this.v"}, "regex": search_query, "options": "i"}}
+                                                            {"$in": [{"$type": "$$this.v"}, ["int", "long", "double", "decimal"]]},
+                                                            {"$regexMatch": {"input": {"$toString": "$$this.v"}, "regex": search_query, "options": "i"}}
                                                         ]
                                                     }
                                                 ]
@@ -287,7 +425,11 @@ def productList(request):
                     {"features": {"$regex": search_query, "$options": "i"}},
                 ]
             }
-        },
+        })
+
+    # Sort & Project
+    pipeline.extend([
+        {"$sort": {"_id": -1}},
         {
             "$project": {
                 "_id": 0,
@@ -299,9 +441,17 @@ def productList(request):
                 "price": {"$ifNull": [{"$round": ["$list_price", 2]}, 0.0]},
                 "mpn": {"$ifNull": ["$mpn", "N/A"]},
                 "brand_name": {"$ifNull": ["$brand_name", "N/A"]},
+                "ai_used": {
+                    "$or": [
+                        {"$gt": [{"$size": {"$ifNull": ["$ai_generated_title", []]}}, 0]},
+                        {"$gt": [{"$size": {"$ifNull": ["$ai_generated_description", []]}}, 0]},
+                        {"$gt": [{"$size": {"$ifNull": ["$ai_generated_features", []]}}, 0]},
+                    ]
+                },
             }
         },
     ])
+
     product_list = list(product.objects.aggregate(*(pipeline)))
     data = dict()
     data['products'] = product_list
@@ -697,8 +847,12 @@ def regenerateAiContents(request):
                 option=selected_option,
             )
         if rework_any:
-            result[field] = items
-            update_obj[f"ai_generated_{field}"] = items
+            existing_versions = getattr(product_obj, f"ai_generated_{field}", []) or []
+            existing_versions = [{**v, "checked": False} for v in existing_versions]
+            new_versions = [{**item, "checked": False} for item in items]
+            full_list = (existing_versions + new_versions)[:MAX_REWRITE_COUNT]
+            result[field] = full_list
+            update_obj[f"ai_generated_{field}"] = full_list
             if field == "title":
                 title_count += 1
                 counters_to_update["ai_title_rewrite_count"] = title_count
