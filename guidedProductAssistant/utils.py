@@ -41,7 +41,7 @@ def productDetails(product_id):
             "model" : {"$ifNull": ["$model", "N/A"]},
             "mpn" : {"$ifNull": ["$mpn", "N/A"]},
             "upc_ean" : {"$ifNull": ["$upc_ean", "N/A"]},
-            "logo" : {"$ifNull" : [{"$first":"$images"},"http://example.com/"]},
+            "logo" : {"$ifNull" : [{"$first":"$images.url"},"http://example.com/"]},
             "long_description" : {"$ifNull": ["$long_description", "N/A"]},
             "short_description" : {"$ifNull": ["$short_description", "N/A"]},
             "list_price" : {"$ifNull": ["$list_price", 0.0]},

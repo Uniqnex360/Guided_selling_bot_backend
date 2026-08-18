@@ -69,7 +69,7 @@ class product(Document):
     long_description = fields.StringField(default="")
     short_description = fields.StringField()
     features = fields.ListField(fields.StringField())
-    images = fields.ListField(fields.StringField())
+    images = fields.ListField(fields.DictField()) 
     attributes = fields.DictField(default={})
     tags = fields.ListField(fields.StringField())
     msrp = fields.FloatField(default=0.0)
@@ -110,7 +110,20 @@ class product(Document):
     ai_features_rewrite_count = fields.IntField(default=0)
     ai_description_rewrite_count = fields.IntField(default=0)
     
-
+def _to_float(value, default=0.0):
+    if value is None:
+        return default
+    try:
+        if isinstance(value, (int, float)):
+            if pd.isna(value):
+                return default
+            return float(value)
+        cleaned = str(value).strip().replace("$", "").replace(",", "")
+        if cleaned == "" or cleaned.lower() == "nan":
+            return default
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return default
 
 def save_products_from_excel(file_path):
     try:
@@ -147,46 +160,87 @@ def save_products_from_excel(file_path):
                 if pd.notna(key) and pd.notna(value):
                     attributes[str(key).strip()] = str(value).strip()
             images = []
-            for url_field in ["Wurth URL", "Brand URL"]:
-                url = row.get(url_field)
+            for i in range(1,11):
+                url=row.get(f"image url {i}")
                 if pd.notna(url) and str(url).strip():
-                    images.append(str(url).strip())
+                    name=row.get(f"image name {i}")
+                    images.append({
+                        "name":str(name).strip() if pd.notna(name) else "",
+                        "url":str(url).strip()
+                    })
+            # for url_field in ["Wurth URL", "Brand URL"]:
+            #     url = row.get(url_field)
+            #     if pd.notna(url) and str(url).strip():
+            #         images.append(str(url).strip())
             tags = [tag.strip()
                     for tag in str(row.get("Tags", "")).split(",") if tag.strip()]
             return_applicable = str(
                 row.get("Return Applicable", "")).strip().lower() == "yes"
             availability_str = str(row.get("Availability", "")).strip().lower()
             availability = True if availability_str == "in stock" else False
-            product_obj = product(
-                sku_number_product_code_item_number=str(row.get("SKU", "")),
-                product_name=str(row.get("Product Title", "")),
-                mpn=str(row.get("MPN", "")),
-                brand_name=brand_name,
-                brand_id=brand_obj.id,
-                category_id=category_obj.id,
-                breadcrumb=" > ".join(category_names),
-                long_description=str(row.get("Long Description", "")),
-                short_description=str(row.get("Short Description", "")),
-                features=features,
-                attributes=attributes,
-                images=images,
-                msrp=float(row.get("MSRP", 0)),
-                currency=str(row.get("Currency", "")),
-                was_price=float(row.get("Was Price", 0)),
-                list_price=float(row.get("List Price", 0)),
-                discount=float(row.get("Discount", 0)),
-                quantity=float(row.get("Quantity", 0)),
-                return_applicable=return_applicable,
-                return_in_days=str(row.get("Return in Days", "")),
-                tags=tags,
-                from_the_manufacture=brand_name,
-                industry_id_str=str(row.get("Industry", "")),
-                tax=float(row.get("Tax", 0)),
-                manufacture_unit_id=mu_obj.id,
-                availability=availability
-            )
-            product_obj.save()
-            print(f"Saved: {product_obj.product_name}")
+            sku = str(row.get("SKU", "")).strip()
+            existing_product = product.objects(sku_number_product_code_item_number=sku).first() if sku else None
+            if existing_product:
+                # update existing instead of creating duplicate
+                for field, value in {
+                    "product_name": str(row.get("Product Title", "")),
+                    "mpn": str(row.get("MPN", "")),
+                    "brand_name": brand_name,
+                    "brand_id": brand_obj.id,
+                    "category_id": category_obj.id,
+                    "breadcrumb": " > ".join(category_names),
+                    "long_description": str(row.get("Long Description", "")),
+                    "short_description": str(row.get("Short Description", "")),
+                    "features": features,
+                    "attributes": attributes,
+                    "images": images,
+                    "msrp": _to_float(row.get("MSRP")),
+                    "was_price": _to_float(row.get("Was Price")),
+                    "list_price": _to_float(row.get("List Price")),
+                    "discount": _to_float(row.get("Discount")),
+                    "quantity": _to_float(row.get("Quantity")),
+                    "return_applicable": return_applicable,
+                    "return_in_days": str(row.get("Return in Days", "")),
+                    "tags": tags,
+                    "from_the_manufacture": brand_name,
+                    "industry_id_str": str(row.get("Industry", "")),
+                    "tax": _to_float(row.get("Tax")),
+                    "manufacture_unit_id": mu_obj.id,
+                    "availability": availability,
+                }.items():
+                    setattr(existing_product, field, value)
+                existing_product.save()
+                print(f"Updated: {existing_product.product_name}")
+            else:
+                product_obj = product(
+                    sku_number_product_code_item_number=str(row.get("SKU", "")),
+                    product_name=str(row.get("Product Title", "")),
+                    mpn=str(row.get("MPN", "")),
+                    brand_name=brand_name,
+                    brand_id=brand_obj.id,
+                    category_id=category_obj.id,
+                    breadcrumb=" > ".join(category_names),
+                    long_description=str(row.get("Long Description", "")),
+                    short_description=str(row.get("Short Description", "")),
+                    features=features,
+                    attributes=attributes,
+                    images=images,
+                    msrp=_to_float(row.get("MSRP")),
+                    was_price=_to_float(row.get("Was Price")),
+                    list_price=_to_float(row.get("List Price")),
+                    discount=_to_float(row.get("Discount")),
+                    quantity=_to_float(row.get("Quantity")),
+                    return_applicable=return_applicable,
+                    return_in_days=str(row.get("Return in Days", "")),
+                    tags=tags,
+                    from_the_manufacture=brand_name,
+                    industry_id_str=str(row.get("Industry", "")),
+                    tax=_to_float(row.get("Tax")),
+                    manufacture_unit_id=mu_obj.id,
+                    availability=availability
+                )
+                product_obj.save()
+                print(f"Saved: {product_obj.product_name}")
     except Exception as e:
         print(f"FAILED at excel row={_+2}")  # +2 for header + 0-index
         print("Row data:", row.to_dict())

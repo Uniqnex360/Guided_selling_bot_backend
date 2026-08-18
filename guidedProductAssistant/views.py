@@ -170,7 +170,7 @@ def product_list(request):
             "$project": {
                 "_id": 0,
                 "id": {"$toString": "$_id"},
-                "image_url": {"$ifNull": [{"$first": "$images"}, "http://example.com/"]},
+                "image_url": {"$ifNull": [{"$first": "$images.url"}, "http://example.com/"]},
                 "sku": {"$ifNull": ["$sku_number_product_code_item_number", "N/A"]},
                 "name": {"$ifNull": ["$product_name", "N/A"]},
                 "category": "$product_category_ins.name",
