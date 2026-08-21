@@ -6,7 +6,28 @@ from django.conf import settings
 from openai import OpenAI, OpenAIError
 from guidedProductAssistant.models import product
 from product_assistant.crud import DatabaseModel
+
 client = OpenAI(api_key=settings.OPEN_AI_KEY)
+
+NO_NAME_IN_BODY_RULE = (
+    "- Do not mention the product name, model number, or product code anywhere "
+    "in the output, including mid-sentence — refer to it only as \"this product\", "
+    "\"this component\", \"this item\", or by its general category (e.g. \"this acorn nut\")."
+)
+NO_NAME_OPENING_RULE = (
+    "- Do not begin with the product name, brand name, or model number — "
+    "open with a general statement about its function, category, or use instead."
+)
+NO_CODES_RULE = (
+    "- Do NOT include the SKU, MPN, UPC/EAN, model number, or any internal product codes."
+)
+NO_PROMO_PRICE_RULE = (
+    '- Do NOT add prices, quantities, or marketing words like "best", "cheap", "discount".'
+)
+AVOID_AI_STYLE_RULE = "- Avoid AI-style wording."
+AVOID_PROMO_LANGUAGE_RULE = "- Avoid promotional language."
+DO_NOT_INVENT_SPECS_RULE = "- Do not invent specifications."
+
 EDITOR_SYSTEM_PROMPT = """You are a senior industrial ecommerce content editor.
 Your content should be optimized for both Search Engine Optimization (SEO) and
 Generative Engine Optimization (GEO). Write naturally as if prepared by an
@@ -15,11 +36,14 @@ Avoid AI-style writing patterns, repetitive phrasing, generic marketing
 language, and exaggerated claims. Do not invent specifications or technical
 details. Only use information supplied about the product. Before returning the
 response, revise it once to make it read naturally and professionally."""
+
 REWRITE_SYSTEM_PROMPT = """You are a senior industrial ecommerce content editor.
 Rewrite content so it sounds naturally human-written. Improve Search Engine
 Optimization (SEO) and Generative Engine Optimization (GEO). Preserve technical
 accuracy. Do not invent specifications. Avoid AI-style wording, repetitive
 phrasing, and promotional language."""
+
+
 def call_openai(prompt, system_prompt=EDITOR_SYSTEM_PROMPT,
                 model="gpt-4", temperature=0.3, max_tokens=None):
     try:
@@ -38,6 +62,8 @@ def call_openai(prompt, system_prompt=EDITOR_SYSTEM_PROMPT,
     except OpenAIError as e:
         print("OpenAI Error:", e)
         return None
+
+
 def product_prompt_info(p):
     return f"""
             Product Name: {p.product_name}
@@ -45,6 +71,9 @@ def product_prompt_info(p):
             SKU: {p.sku_number_product_code_item_number}
             MPN: {getattr(p, 'mpn', '')}
             """
+
+
+
 TITLE_PROMPT = """
             Generate one product title.
             Product Information:
@@ -55,13 +84,14 @@ TITLE_PROMPT = """
             - Include the product name naturally.
             - Keep under 120 characters.
             - Use Title Case.
-            - Do not invent specifications.
+            """ + DO_NOT_INVENT_SPECS_RULE + """
             - Include the brand when available.
-            - Do NOT include the SKU, MPN, UPC/EAN, model number, or any internal product codes.
-            - Do NOT add prices, quantities, or marketing words like "best", "cheap", "discount".
-            - Do not use promotional language.
+            """ + NO_CODES_RULE + """
+            """ + NO_PROMO_PRICE_RULE + """
+            """ + AVOID_PROMO_LANGUAGE_RULE + """
             Return only the title.
             """
+
 FEATURES_PROMPT = """
             Generate one product feature list.
             Product Information:
@@ -71,14 +101,18 @@ FEATURES_PROMPT = """
             - Produce one feature list.
             - Include 6-8 concise bullet points.
             - Optimize for SEO and GEO.
+            """ + NO_NAME_IN_BODY_RULE + """
+            """ + NO_CODES_RULE + """
+            
             - Write naturally.
             - Focus on factual product information.
             - Mention applications, materials, compatibility and specifications when available.
             - Do not invent information.
-            - Avoid promotional language.
-            - Avoid AI-style wording.
+            """ + AVOID_PROMO_LANGUAGE_RULE + """
+            """ + AVOID_AI_STYLE_RULE + """
             Return only the bullet list.
             """
+
 DESCRIPTION_PROMPT = """
             Generate one product description.
             Product Information:
@@ -98,7 +132,10 @@ DESCRIPTION_PROMPT = """
             - Be approximately 150–200 words total across the paragraphs, unless available source content is significantly shorter.
             - Contain only real product facts — no invented benefits, no invented use cases.
             - Optimize for SEO and Generative Engine Optimization (GEO).
-            - Do not invent specifications.
+            """ + DO_NOT_INVENT_SPECS_RULE + """
+            """ + NO_NAME_IN_BODY_RULE + """
+            """ + NO_NAME_OPENING_RULE + """
+            """ + NO_CODES_RULE + """
             Avoid phrases such as:
             - Introducing...
             - Meet...
@@ -110,6 +147,9 @@ DESCRIPTION_PROMPT = """
             - Reliable solution...
             Return only the description.
             """
+
+
+
 REWRITE_TITLE_PROMPT = """
                         You are a senior industrial ecommerce content editor.
                         Rewrite the following product title.
@@ -122,13 +162,14 @@ REWRITE_TITLE_PROMPT = """
                         - Sound naturally human-written.
                         - Improve SEO and GEO.
                         - Preserve technical accuracy.
-                        - Do not invent specifications.
-                        - Do NOT include the SKU, MPN, UPC/EAN, model number, or any internal product codes.
-                        - Do NOT add prices, quantities, or marketing words like "best", "cheap", "discount".
-                        - Avoid AI-style wording.
-                        - Avoid promotional language.
+                        """ + DO_NOT_INVENT_SPECS_RULE + """
+                        """ + NO_CODES_RULE + """
+                        """ + NO_PROMO_PRICE_RULE + """
+                        """ + AVOID_AI_STYLE_RULE + """
+                        """ + AVOID_PROMO_LANGUAGE_RULE + """
                         Return only the rewritten title.
                         """
+
 REWRITE_FEATURES_PROMPT = """
                         You are a senior ecommerce content editor.
                         Rewrite the following product features.
@@ -141,9 +182,12 @@ REWRITE_FEATURES_PROMPT = """
                         - Sound naturally human-written.
                         - Preserve technical accuracy.
                         - Improve SEO and GEO.
-                        - Do not invent specifications.
+                        """ + DO_NOT_INVENT_SPECS_RULE + """
+                        """ + NO_CODES_RULE + """
+                        """ + NO_NAME_IN_BODY_RULE + """
                         Return only the rewritten bullet list.
                         """
+
 REWRITE_DESCRIPTION_PROMPT = """
                     You are a senior ecommerce content editor.
                     Rewrite the following product description.
@@ -157,12 +201,19 @@ REWRITE_DESCRIPTION_PROMPT = """
                     - Sound naturally human-written.
                     - Preserve technical accuracy.
                     - Improve SEO and GEO.
+                    """ + NO_NAME_IN_BODY_RULE + """
+                    """ + NO_NAME_OPENING_RULE + """
+                    """ + NO_CODES_RULE + """
                     - Remove repetitive wording.
-                    - Do not invent specifications.
+                    """ + DO_NOT_INVENT_SPECS_RULE + """
                     Return only the rewritten description.
                     """
+
+
 def parse_title(text):
     return text.strip().strip('"').strip("'")
+
+
 def parse_features(text):
     return [
         line.strip("-•*0123456789. ").strip()
@@ -173,8 +224,12 @@ def parse_features(text):
             or re.match(r"^\d+\.", line.strip())
         )
     ]
+
+
 def parse_description(text):
     return text.strip()
+
+
 GENERATE_SPECS = {
     "title": {
         "prompt": TITLE_PROMPT,
@@ -194,9 +249,9 @@ GENERATE_SPECS = {
         "existing_field": "long_description",
     },
 }
+
 REWRITE_SPECS = {
     "title": {"prompt": REWRITE_TITLE_PROMPT, "parse": parse_title},
     "features": {"prompt": REWRITE_FEATURES_PROMPT, "parse": parse_features},
     "description": {"prompt": REWRITE_DESCRIPTION_PROMPT, "parse": parse_description},
 }
-
